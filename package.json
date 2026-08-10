@@ -1,0 +1,35 @@
+{
+  "name": "artist-marketplace",
+  "private": true,
+  "packageManager": "npm@11.17.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @artist-platform/web run dev",
+    "build:web": "npm --workspace @artist-platform/web run build",
+    "lint:web": "npm --workspace @artist-platform/web run lint",
+    "typecheck:web": "npm --workspace @artist-platform/web run typecheck",
+    "test:web": "npm --workspace @artist-platform/web run test",
+    "dev:api": "npm --workspace @artist-platform/api run dev",
+    "build:api": "npm --workspace @artist-platform/api run build",
+    "lint:api": "npm --workspace @artist-platform/api run lint",
+    "typecheck:api": "npm --workspace @artist-platform/api run typecheck",
+    "test:api": "npm --workspace @artist-platform/api run test",
+    "lint": "npm run lint:web && npm run lint:api",
+    "typecheck": "npm run typecheck:web && npm run typecheck:api",
+    "test": "npm run test:web && npm run test:api"
+  },
+
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-prettier": "^5.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.6.0"
+  }
+}

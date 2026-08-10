@@ -1,0 +1,34 @@
+# Node modules
+node_modules/
+
+# npm lockfiles
+package-lock.json
+
+# Build output
+.next/
+dist/
+build/
+coverage/
+
+# Environment
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Temporary
+*.tmp
+*.temp
