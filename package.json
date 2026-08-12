@@ -17,19 +17,25 @@
     "lint:api": "npm --workspace @artist-platform/api run lint",
     "typecheck:api": "npm --workspace @artist-platform/api run typecheck",
     "test:api": "npm --workspace @artist-platform/api run test",
+    "build": "npm run build:web && npm run build:api",
     "lint": "npm run lint:web && npm run lint:api",
     "typecheck": "npm run typecheck:web && npm run typecheck:api",
-    "test": "npm run test:web && npm run test:api"
+    "test": "npm run test:web && npm run test:api",
+    "check": "npm run lint && npm run typecheck",
+    "ci": "npm run check && npm run test",
+    "format": "prettier --write ."
   },
-
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^7.11.0",
-    "@typescript-eslint/parser": "^7.11.0",
-    "eslint": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^8.2.0",
+    "@typescript-eslint/parser": "^8.2.0",
+    "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-prettier": "^5.0.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "5.5.4"
   }
 }

@@ -7,11 +7,7 @@ describe('HomePage', () => {
   it('renders the homepage hero content', () => {
     render(<HomePage />);
 
-    ```
-expect(screen.getByText('Artist Marketplace')).toBeInTheDocument();
-expect(
-  screen.getByRole('link', { name: /Explore the frontend/i }),
-).toBeInTheDocument();
-```;
+    expect(screen.getByText('Artist Marketplace')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Explore the frontend/i })).toBeInTheDocument();
   });
 });

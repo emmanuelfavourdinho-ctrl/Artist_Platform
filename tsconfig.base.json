@@ -15,7 +15,7 @@
     "jsx": "preserve",
     "baseUrl": ".",
     "paths": {
-      "@artist-platform/*": ["packages/*/src/*"]
+      "@artist-platform/*": ["packages/*/src"]
     }
   },
   "include": ["packages/**/*", "apps/**/*"],
