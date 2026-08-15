@@ -1,17 +1,64 @@
+/*
+  ---------------------------------------------------------------------------
+  Explainer: this file is the "settings page" for the whole site.
+  Instead of typing a color like #E3B341 in fifty different files, we type
+  it once here and give it a name (--accent). Every component then says
+  "use --accent" instead of the raw color. Change it once here, and the
+  whole site updates. This is called a "design token system".
+  ---------------------------------------------------------------------------
+*/
+
+@import '@fontsource/fraunces/400.css';
+@import '@fontsource/fraunces/400-italic.css';
+@import '@fontsource/fraunces/500.css';
+@import '@fontsource/fraunces/600.css';
+@import '@fontsource/fraunces/300-italic.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: dark;
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+
+  /* ---- Color tokens -------------------------------------------------- */
+  --background: 11 11 12; /* #0B0B0C ink black */
+  --surface: 23 24 26; /* #17181A charcoal panels */
+  --surface-raised: 30 31 33; /* slightly lighter charcoal for hover states */
+  --foreground: 244 243 239; /* #F4F3EF canvas off-white */
+  --muted: 138 138 141; /* #8A8A8D soft gray */
+  --border: 244 243 239; /* off-white, used with low alpha for hairlines */
+  --accent: 227 179 65; /* #E3B341 warm gallery-spotlight gold */
+  --accent-foreground: 20 16 4; /* near-black text used on top of the accent */
+
+  /* ---- Type tokens ----------------------------------------------------
+     "display" = big emotional headlines. "body" = everything you read.
+     "label" = tiny uppercase tags, like a museum wall plaque.
+  ----------------------------------------------------------------------*/
+  --font-display: 'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-body:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* ---- Spacing / shape tokens ------------------------------------------ */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --container-gutter: clamp(1.25rem, 4vw, 3rem);
+
+  /* ---- Motion tokens ---------------------------------------------------
+     One place to control how "expensive" motion feels across the site.
+  ----------------------------------------------------------------------*/
+  --ease-cinematic: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-slideshow: 7000ms;
+  --duration-crossfade: 1800ms;
+  --duration-reveal: 900ms;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 html {
@@ -21,9 +68,88 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #0f172a;
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
 
-* {
-  box-sizing: border-box;
+/* Visible keyboard focus everywhere — required for accessibility, and it
+   should look intentional, not like a broken browser default. */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: rgb(var(--accent) / 0.35);
+  color: rgb(var(--foreground));
+}
+
+/* Respect people who have asked their OS for less motion. This turns
+   long cinematic transitions into instant, safe changes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes fade-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-scale-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.08);
+  }
+  to {
+    transform: translate3d(-1.5%, -1%, 0) scale(1.08);
+  }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scroll-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 1;
+  }
 }

@@ -1,35 +1,41 @@
-import Link from 'next/link';
+import { Navbar } from '../components/layout/Navbar';
+import { Footer } from '../components/layout/Footer';
+import { Hero } from '../components/hero/Hero';
+import { FeaturedArtists } from '../components/artists/FeaturedArtists';
+import { FeaturedArtworks } from '../components/artworks/FeaturedArtworks';
+import { CreativeCategories } from '../components/categories/CreativeCategories';
+import { ValueProposition } from '../components/sections/ValueProposition';
+import { FinalCTA } from '../components/sections/FinalCTA';
 
+/*
+  Explainer: this file is intentionally just a "table of contents" for the
+  homepage — it imports each section and lists them in order. All the
+  actual design work lives inside each component. Keeping this file thin
+  makes it easy to reorder, remove, or test sections later without
+  touching their internals.
+*/
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <section className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-16 sm:px-8">
-        <div className="space-y-8 text-center">
-          <p className="text-sm uppercase tracking-[0.4em] text-slate-400">Artist Marketplace</p>
-          <h1 className="text-4xl font-semibold sm:text-5xl lg:text-6xl">
-            Foundation for a performance-first art marketplace.
-          </h1>
-          <p className="mx-auto max-w-3xl text-base leading-8 text-slate-300 sm:text-lg">
-            A clean, scalable starter architecture for Next.js, Express, PostgreSQL, Redis, and
-            object storage. This setup prioritizes SEO, image performance, and a predictable REST
-            API.
-          </p>
-          <div className="mx-auto flex flex-col gap-4 sm:flex-row sm:justify-center">
-            <Link
-              href="/"
-              className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
-            >
-              Explore the frontend
-            </Link>
-            <Link
-              href="/"
-              className="rounded-full border border-slate-700 bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:border-slate-500"
-            >
-              View architecture notes
-            </Link>
-          </div>
-        </div>
-      </section>
-    </main>
+    <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-full focus:bg-accent focus:px-5 focus:py-3 focus:text-sm focus:font-medium focus:text-accent-foreground"
+      >
+        Skip to main content
+      </a>
+
+      <Navbar />
+
+      <main id="main-content" className="bg-background">
+        <Hero />
+        <FeaturedArtists />
+        <FeaturedArtworks />
+        <CreativeCategories />
+        <ValueProposition />
+        <FinalCTA />
+      </main>
+
+      <Footer />
+    </>
   );
 }

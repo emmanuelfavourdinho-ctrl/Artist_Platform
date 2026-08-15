@@ -18,6 +18,15 @@
       "@artist-platform/*": ["packages/*/src"]
     }
   },
-  "include": ["packages/**/*", "apps/**/*"],
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "**/*.ts",
+    "**/*.tsx",
+
+    "packages/**/*",
+    "apps/**/*"
+  ],
+
   "exclude": ["node_modules"]
 }

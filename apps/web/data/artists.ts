@@ -1,0 +1,58 @@
+import type { Artist } from './types';
+
+export const artists: Artist[] = [
+  {
+    id: 'artist-01',
+    name: 'Angel-Faith',
+    discipline: 'Painter',
+    location: 'Accra, Ghana',
+    bio: 'Large-format oil work exploring memory and West African textile pattern.',
+    image: '/images/artists/artist-01.jpg',
+    imageAlt: 'Portrait of Amara Osei',
+  },
+  {
+    id: 'artist-02',
+    name: 'Shalom',
+    discipline: 'Sculptor',
+    location: 'Bamenda, Cameroon',
+    bio: 'Carves reclaimed marble into forms that study weight and balance.',
+    image: '/images/artists/artist-02.jpg',
+    imageAlt: 'Portrait of shalom',
+  },
+  {
+    id: 'artist-03',
+    name: 'Noa Lindqvist',
+    discipline: 'Photographer',
+    location: 'Reykjavík, Iceland',
+    bio: 'Long-exposure landscapes shot on expired film stock.',
+    image: '/images/artists/artist-03.jpg',
+    imageAlt: 'Portrait of Noa Lindqvist',
+  },
+  {
+    id: 'artist-04',
+    name: 'Priya Raman',
+    discipline: 'Digital Artist',
+    location: 'Bengaluru, India',
+    bio: 'Generative systems and code-driven prints shown across three continents.',
+    image: '/images/artists/artist-04.jpg',
+    imageAlt: 'Portrait of Priya Raman',
+  },
+  {
+    id: 'artist-05',
+    name: 'Tomás Rivera',
+    discipline: 'Illustrator',
+    location: 'Mexico City, Mexico',
+    bio: 'Editorial illustration for publications spanning politics to fiction.',
+    image: '/images/artists/artist-05.jpg',
+    imageAlt: 'Portrait of Tomás Rivera',
+  },
+  {
+    id: 'artist-06',
+    name: ' Drizz Bankz',
+    discipline: 'Ceramicist',
+    location: 'Los Angeles, California, USA',
+    bio: 'Wood-fired stoneware built around imperfection and repair.',
+    image: '/images/artists/artist-06.jpg',
+    imageAlt: 'Portrait of Drizz Bankz',
+  },
+];

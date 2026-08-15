@@ -4,11 +4,13 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'Artist Marketplace',
-  description: 'A modern foundation for an artist art-selling marketplace.',
+  title: 'Artist_Platform — Where creativity finds its audience',
+  description:
+    'A creative ecosystem for discovering artists, showcasing work, building connections, and turning creativity into opportunity.',
   openGraph: {
-    title: 'Artist Marketplace',
-    description: 'A modern foundation for an artist art-selling marketplace.',
+    title: 'Artist_Platform — Where creativity finds its audience',
+    description:
+      'A creative ecosystem for discovering artists, showcasing work, building connections, and turning creativity into opportunity.',
     type: 'website',
   },
   twitter: {
@@ -19,7 +21,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="font-body">{children}</body>
     </html>
   );
 }
