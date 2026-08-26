@@ -32,18 +32,18 @@ export function HeroContent() {
         className="animate-reveal-up mt-6 max-w-xl text-base leading-7 text-foreground/75 sm:text-lg"
         style={{ '--reveal-delay': '600ms' } as CSSProperties}
       >
-        A creative ecosystem for discovering artists, showcasing work, building connections,
-        and turning creativity into opportunity.
+        A creative ecosystem for discovering artists, showcasing work, building connections, and
+        turning creativity into opportunity.
       </p>
 
       <div
         className="animate-reveal-up mt-9 flex flex-col gap-4 sm:flex-row"
         style={{ '--reveal-delay': '750ms' } as CSSProperties}
       >
-        <Button href="/" variant="primary">
+        <Button href="/gallery" variant="primary">
           Explore Artists
         </Button>
-        <Button href="/" variant="secondary">
+        <Button href="/register" variant="secondary">
           Start Creating
         </Button>
       </div>

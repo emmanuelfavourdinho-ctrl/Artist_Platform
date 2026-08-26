@@ -21,7 +21,7 @@ export function FeaturedArtworks() {
           >
             Work worth <span className="italic text-accent">discovering.</span>
           </h2>
-          <Button href="/" variant="secondary">
+          <Button href="/gallery" variant="secondary">
             View marketplace
           </Button>
         </Reveal>

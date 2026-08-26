@@ -9,10 +9,18 @@ const priceFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
+/*
+  Note: this card's data comes from the static data/artworks.ts mock
+  file, not the real API — so there's no real slug to link to an
+  individual /artwork/[slug] page yet. Pointing at /gallery for now
+  (the real, working collection) rather than a dead '/' link. If this
+  section switches to real fetched data later, this becomes
+  `/artwork/${artwork.slug}` — same pattern as GalleryArtworkCard.
+*/
 export function ArtworkCard({ artwork }: { artwork: Artwork }) {
   return (
     <Link
-      href="/"
+      href="/gallery"
       className={`group relative block overflow-hidden rounded-md focus-visible:outline-2 ${
         artwork.size === 'lg' ? 'aspect-[4/5]' : 'aspect-[4/3]'
       }`}

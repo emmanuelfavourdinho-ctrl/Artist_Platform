@@ -1,0 +1,1162 @@
+diff --git a/apps/api/eslint.config.js b/apps/api/eslint.config.js
+new file mode 100644
+index 0000000..01030c6
+--- /dev/null
++++ b/apps/api/eslint.config.js
+@@ -0,0 +1,42 @@
++// Explainer: ESLint 9 changed how its configuration file works — the
++// old .eslintrc.json format (still present in this repo, one level up)
++// is no longer read automatically. This file is the modern replacement,
++// written to enforce the exact same rules as the existing .eslintrc.json
++// files, just in the format ESLint 9 actually understands. Nothing
++// about the RULES changed here, only the file format they're written in.
++import js from '@eslint/js';
++import tseslint from '@typescript-eslint/eslint-plugin';
++import tsParser from '@typescript-eslint/parser';
++import prettier from 'eslint-config-prettier';
++import globals from 'globals';
++
++export default [
++  js.configs.recommended,
++  {
++    files: ['src/**/*.ts', 'scripts/**/*.ts'],
++    languageOptions: {
++      parser: tsParser,
++      ecmaVersion: 'latest',
++      sourceType: 'module',
++      globals: {
++        ...globals.node,
++      },
++    },
++    plugins: {
++      '@typescript-eslint': tseslint,
++    },
++    rules: {
++      ...tseslint.configs.recommended.rules,
++      '@typescript-eslint/no-explicit-any': 'off',
++      '@typescript-eslint/no-unused-vars': [
++        'error',
++        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
++      ],
++      // Turn off the base no-unused-vars in favor of the TypeScript-aware
++      // version above — running both at once causes false-positive
++      // duplicate warnings on the same line.
++      'no-unused-vars': 'off',
++    },
++  },
++  prettier,
++];
+diff --git a/apps/api/package.json b/apps/api/package.json
+index 3a9f609..ae131d4 100644
+--- a/apps/api/package.json
++++ b/apps/api/package.json
+@@ -9,26 +9,33 @@
+     "start": "node dist/server.js",
+     "lint": "eslint \"src/**/*.{ts,js}\" --max-warnings=0",
+     "typecheck": "tsc --noEmit",
+-    "test": "vitest run"
++    "test": "vitest run",
++    "create-admin": "ts-node-dev --transpile-only --respawn=false scripts/createAdmin.ts"
+   },
+   "dependencies": {
+     "@prisma/client": "^5.12.0",
++    "bcryptjs": "^3.0.3",
++    "cookie-parser": "^1.4.7",
+     "cors": "^2.8.5",
+     "dotenv": "^16.3.1",
+     "express": "^4.19.0",
++    "express-rate-limit": "^8.6.2",
+     "helmet": "^7.0.0",
++    "jsonwebtoken": "^9.0.3",
+     "zod": "^3.23.2"
+   },
+   "devDependencies": {
++    "@types/cookie-parser": "^1.4.10",
+     "@types/cors": "^2.8.13",
+     "@types/express": "^4.17.18",
+     "@types/helmet": "^4.0.0",
++    "@types/jsonwebtoken": "^9.0.10",
+     "@types/node": "^20.14.2",
+     "@types/supertest": "^7.2.1",
+-    "eslint": "^9.0.0",
+-    "eslint-config-prettier": "^9.0.0",
+     "@typescript-eslint/eslint-plugin": "^8.2.0",
+     "@typescript-eslint/parser": "^8.2.0",
++    "eslint": "^9.0.0",
++    "eslint-config-prettier": "^9.0.0",
+     "prettier": "^3.0.0",
+     "prisma": "^5.12.0",
+     "supertest": "^7.2.2",
+diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
+index 8cabf44..b19ab48 100644
+--- a/apps/api/prisma/schema.prisma
++++ b/apps/api/prisma/schema.prisma
+@@ -13,3 +13,67 @@ model User {
+   name      String?
+   createdAt DateTime @default(now())
+ }
++
++/*
++  Explainer: an "enum" is just a fixed, named list of the only values
++  allowed in a field — like a multiple-choice question where these are
++  the only three valid answers. A review's `status` can ONLY ever be one
++  of these three words, never a typo like "aproved" or a made-up value.
++  This is what makes the approval workflow actually enforceable at the
++  database level, not just something we "remember" to check in code.
++*/
++enum ReviewStatus {
++  PENDING
++  APPROVED
++  REJECTED
++}
++
++/*
++  Explainer: this is the actual "review" record — one row per review
++  ever submitted, whether it ends up approved, rejected, or still
++  waiting. Every review starts life as PENDING (see the @default below)
++  the instant it's created — there is no code path that lets a brand-new
++  review skip straight to APPROVED. An admin has to actively change it.
++
++  `artistId` is a plain string for now (matching ids like "artist-01"
++  from the frontend's data files) rather than a strict foreign key,
++  because Artist records don't live in this database yet — they're
++  still in the frontend's static data files. Once artists genuinely
++  live in Postgres too (a natural future migration), this becomes a
++  real foreign key with referential integrity. Flagging that honestly
++  rather than pretending it's already fully wired up.
++*/
++model Review {
++  id          String       @id @default(cuid())
++  artistId    String
++  authorName  String
++  authorEmail String
++  rating      Int
++  comment     String
++  status      ReviewStatus @default(PENDING)
++  createdAt   DateTime     @default(now())
++  moderatedAt DateTime?
++  moderatedBy String?
++
++  // An index speeds up exactly the lookup our public endpoint does most
++  // often: "give me all APPROVED reviews for artist X" — without this,
++  // that query gets slower as the reviews table grows into the
++  // thousands; with it, it stays fast regardless of table size.
++  @@index([artistId, status])
++}
++
++/*
++  Explainer: a separate table for admins, deliberately NOT the same as
++  the regular `User` model above. There is intentionally no public
++  "sign up as admin" page anywhere — admin accounts only ever get
++  created by a trusted person running a one-off script directly against
++  the database (see scripts/createAdmin.ts). That's a deliberate
++  security choice: the smaller and more controlled the path to becoming
++  an admin, the smaller the attack surface.
++*/
++model Admin {
++  id           String   @id @default(cuid())
++  email        String   @unique
++  passwordHash String
++  createdAt    DateTime @default(now())
++}
+diff --git a/apps/api/scripts/createAdmin.ts b/apps/api/scripts/createAdmin.ts
+new file mode 100644
+index 0000000..6a1f490
+--- /dev/null
++++ b/apps/api/scripts/createAdmin.ts
+@@ -0,0 +1,53 @@
++import { hashPassword } from '../src/lib/auth.js';
++import { prisma } from '../src/lib/prisma.js';
++
++/*
++  Explainer: this is a one-off script — you run it manually, from your
++  own terminal, when you personally decide a new admin account should
++  exist. It is NOT a route the website exposes to visitors, and there is
++  deliberately no "sign up as admin" button anywhere on the site. That's
++  the whole security model for how someone becomes an admin: only
++  someone with direct access to this codebase and this database can
++  create one, ever.
++
++  Usage:  npm run create-admin -- you@example.com "a genuinely strong password"
++  (everything after the -- gets passed through as arguments to this script)
++*/
++async function main() {
++  const email = process.argv[2];
++  const password = process.argv[3];
++
++  if (!email || !password) {
++    console.error('Usage: npm run create-admin -- <email> <password>');
++    process.exitCode = 1;
++    return;
++  }
++
++  if (password.length < 12) {
++    console.error('Password must be at least 12 characters long.');
++    process.exitCode = 1;
++    return;
++  }
++
++  const passwordHash = await hashPassword(password);
++
++  // `upsert` = "update if it already exists, otherwise create it" — so
++  // running this script again for the same email safely resets that
++  // admin's password instead of erroring out.
++  const admin = await prisma.admin.upsert({
++    where: { email },
++    update: { passwordHash },
++    create: { email, passwordHash },
++  });
++
++  console.log(`Admin account ready: ${admin.email}`);
++}
++
++main()
++  .catch((err) => {
++    console.error(err);
++    process.exitCode = 1;
++  })
++  .finally(async () => {
++    await prisma.$disconnect();
++  });
+diff --git a/apps/api/src/__tests__/admin.test.ts b/apps/api/src/__tests__/admin.test.ts
+new file mode 100644
+index 0000000..30174c4
+--- /dev/null
++++ b/apps/api/src/__tests__/admin.test.ts
+@@ -0,0 +1,144 @@
++import request from 'supertest';
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++
++vi.mock('../lib/prisma.js', () => ({
++  prisma: {
++    review: {
++      findMany: vi.fn(),
++      findUnique: vi.fn(),
++      update: vi.fn(),
++    },
++    admin: {
++      findUnique: vi.fn(),
++    },
++  },
++}));
++
++import { app } from '../app.js';
++import { hashPassword } from '../lib/auth.js';
++import { prisma } from '../lib/prisma.js';
++
++const REAL_PASSWORD = 'a-genuinely-strong-password-123';
++
++async function mockAdminAccount() {
++  vi.mocked(prisma.admin.findUnique).mockResolvedValue({
++    id: 'admin-1',
++    email: 'admin@example.com',
++    passwordHash: await hashPassword(REAL_PASSWORD),
++    createdAt: new Date(),
++  } as never);
++}
++
++describe('Admin authentication', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('blocks the moderation queue for anyone not logged in', async () => {
++    const response = await request(app).get('/api/v1/admin/reviews');
++    expect(response.status).toBe(401);
++  });
++
++  it('blocks moderation actions for anyone not logged in', async () => {
++    const response = await request(app)
++      .patch('/api/v1/admin/reviews/review-1')
++      .send({ action: 'approve' });
++    expect(response.status).toBe(401);
++  });
++
++  it('rejects a login with the wrong password', async () => {
++    await mockAdminAccount();
++
++    const response = await request(app)
++      .post('/api/v1/admin/login')
++      .send({ email: 'admin@example.com', password: 'totally-the-wrong-password' });
++
++    expect(response.status).toBe(401);
++  });
++
++  it('rejects a login for an email that has no admin account, with the SAME error as a wrong password', async () => {
++    vi.mocked(prisma.admin.findUnique).mockResolvedValue(null);
++
++    const response = await request(app)
++      .post('/api/v1/admin/login')
++      .send({ email: 'nobody@example.com', password: 'anything-at-all' });
++
++    expect(response.status).toBe(401);
++    expect(response.body.message).toBe('Invalid email or password');
++  });
++
++  it('logs in with correct credentials and can then reach the moderation queue', async () => {
++    await mockAdminAccount();
++
++    // request.agent (unlike plain `request`) remembers cookies between
++    // requests within this test, the same way a real browser tab does —
++    // this is what lets us prove the login cookie itself is what grants
++    // access, not just that /login returns 200.
++    const agent = request.agent(app);
++
++    const login = await agent
++      .post('/api/v1/admin/login')
++      .send({ email: 'admin@example.com', password: REAL_PASSWORD });
++    expect(login.status).toBe(200);
++
++    vi.mocked(prisma.review.findMany).mockResolvedValue([]);
++    const queue = await agent.get('/api/v1/admin/reviews');
++    expect(queue.status).toBe(200);
++  });
++});
++
++describe('PATCH /api/v1/admin/reviews/:id (approve/reject)', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  async function loggedInAgent() {
++    await mockAdminAccount();
++    const agent = request.agent(app);
++    await agent.post('/api/v1/admin/login').send({ email: 'admin@example.com', password: REAL_PASSWORD });
++    return agent;
++  }
++
++  it('rejects an unknown action value instead of silently ignoring it', async () => {
++    const agent = await loggedInAgent();
++
++    const response = await agent
++      .patch('/api/v1/admin/reviews/review-1')
++      .send({ action: 'delete-everything' }); // not a real action
++
++    expect(response.status).toBe(400);
++    expect(prisma.review.update).not.toHaveBeenCalled();
++  });
++
++  it('returns 404 for a review id that does not exist', async () => {
++    const agent = await loggedInAgent();
++    vi.mocked(prisma.review.findUnique).mockResolvedValue(null);
++
++    const response = await agent
++      .patch('/api/v1/admin/reviews/does-not-exist')
++      .send({ action: 'approve' });
++
++    expect(response.status).toBe(404);
++  });
++
++  it('approving a review flips its status and records exactly which admin approved it', async () => {
++    const agent = await loggedInAgent();
++    vi.mocked(prisma.review.findUnique).mockResolvedValue({ id: 'review-1' } as never);
++    vi.mocked(prisma.review.update).mockResolvedValue({
++      id: 'review-1',
++      status: 'APPROVED',
++      moderatedBy: 'admin@example.com',
++    } as never);
++
++    const response = await agent
++      .patch('/api/v1/admin/reviews/review-1')
++      .send({ action: 'approve' });
++
++    expect(response.status).toBe(200);
++    expect(response.body.data.status).toBe('APPROVED');
++
++    const updateArgs = vi.mocked(prisma.review.update).mock.calls[0][0];
++    expect(updateArgs.data.status).toBe('APPROVED');
++    expect(updateArgs.data.moderatedBy).toBe('admin@example.com');
++  });
++});
+diff --git a/apps/api/src/__tests__/reviews.test.ts b/apps/api/src/__tests__/reviews.test.ts
+new file mode 100644
+index 0000000..352639e
+--- /dev/null
++++ b/apps/api/src/__tests__/reviews.test.ts
+@@ -0,0 +1,116 @@
++import request from 'supertest';
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++
++/*
++  Explainer: `vi.mock` swaps out the real database connection with a
++  fake, controllable stand-in for this test file only. This is exactly
++  the sandbox limitation we talked about — without a real database
++  connection available here, this lets us still fully verify the
++  business LOGIC (validation, what gets queried, what gets blocked)
++  without needing Postgres running. On your machine, with a real
++  database, you'd additionally want to run this against the live DB —
++  these tests complement that, they don't replace it.
++*/
++vi.mock('../lib/prisma.js', () => ({
++  prisma: {
++    review: {
++      create: vi.fn(),
++      findMany: vi.fn(),
++      count: vi.fn(),
++    },
++  },
++}));
++
++import { app } from '../app.js';
++import { prisma } from '../lib/prisma.js';
++
++describe('POST /api/v1/artists/:artistId/reviews', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('rejects a rating outside the 1-5 range', async () => {
++    const response = await request(app)
++      .post('/api/v1/artists/artist-01/reviews')
++      .send({
++        authorName: 'Jane Doe',
++        authorEmail: 'jane@example.com',
++        rating: 9,
++        comment: 'This is a perfectly reasonable length comment.',
++      });
++
++    expect(response.status).toBe(400);
++    expect(prisma.review.create).not.toHaveBeenCalled();
++  });
++
++  it('rejects an invalid email address', async () => {
++    const response = await request(app)
++      .post('/api/v1/artists/artist-01/reviews')
++      .send({
++        authorName: 'Jane Doe',
++        authorEmail: 'not-an-email',
++        rating: 5,
++        comment: 'This is a perfectly reasonable length comment.',
++      });
++
++    expect(response.status).toBe(400);
++  });
++
++  it('rejects a comment that is too short (guards against low-effort spam)', async () => {
++    const response = await request(app)
++      .post('/api/v1/artists/artist-01/reviews')
++      .send({
++        authorName: 'Jane Doe',
++        authorEmail: 'jane@example.com',
++        rating: 5,
++        comment: 'short',
++      });
++
++    expect(response.status).toBe(400);
++  });
++
++  it('creates a review that always starts PENDING, even if the client tries to sneak in a different status', async () => {
++    vi.mocked(prisma.review.create).mockResolvedValue({
++      id: 'review-1',
++      status: 'PENDING',
++    } as never);
++
++    const response = await request(app)
++      .post('/api/v1/artists/artist-01/reviews')
++      .send({
++        authorName: 'Jane Doe',
++        authorEmail: 'jane@example.com',
++        rating: 5,
++        status: 'APPROVED', // deliberately trying to sneak this in
++        comment: 'This is a perfectly reasonable length comment.',
++      });
++
++    expect(response.status).toBe(201);
++    expect(response.body.data.status).toBe('PENDING');
++
++    // The real proof: check exactly what was sent to the database, and
++    // confirm the attacker-supplied "status" field never made it there
++    // at all — it was stripped out by validateBody before this
++    // controller even ran.
++    const createArgs = vi.mocked(prisma.review.create).mock.calls[0][0];
++    expect(createArgs.data).not.toHaveProperty('status');
++  });
++});
++
++describe('GET /api/v1/artists/:artistId/reviews', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('only ever queries for APPROVED reviews for that specific artist', async () => {
++    vi.mocked(prisma.review.findMany).mockResolvedValue([]);
++    vi.mocked(prisma.review.count).mockResolvedValue(0);
++
++    await request(app).get('/api/v1/artists/artist-01/reviews');
++
++    const queryArgs = vi.mocked(prisma.review.findMany).mock.calls[0][0];
++    expect(queryArgs?.where).toEqual(
++      expect.objectContaining({ artistId: 'artist-01', status: 'APPROVED' }),
++    );
++  });
++});
+diff --git a/apps/api/src/app.ts b/apps/api/src/app.ts
+index 01d988a..76e2ab6 100644
+--- a/apps/api/src/app.ts
++++ b/apps/api/src/app.ts
+@@ -1,3 +1,4 @@
++import cookieParser from 'cookie-parser';
+ import cors from 'cors';
+ import express from 'express';
+ import helmet from 'helmet';
+@@ -18,6 +19,9 @@ app.use(
+   }),
+ );
+ app.use(json());
++// Reads any cookies sent with the request (like our admin session
++// cookie) into req.cookies, so requireAdmin.ts can actually access it.
++app.use(cookieParser());
+ 
+ app.use('/api/v1', router);
+ app.use(notFoundHandler);
+diff --git a/apps/api/src/config/index.ts b/apps/api/src/config/index.ts
+index 4acdb23..3cb1b3a 100644
+--- a/apps/api/src/config/index.ts
++++ b/apps/api/src/config/index.ts
+@@ -3,20 +3,36 @@ import { z } from 'zod';
+ 
+ dotenv.config();
+ 
++/*
++  Explainer: JWT_SECRET is the "master key" our server uses to sign
++  admin login tokens — anyone who obtains this exact string could forge
++  a fake "I am the admin" token, so it must be long, random, and never
++  committed to GitHub (it lives only in .env, which .gitignore already
++  excludes). Unlike DATABASE_URL above, we do NOT give this a fallback
++  default — z.string().min(32) below means the server refuses to start
++  at all if this isn't set to something reasonably long. That's
++  deliberate: a missing secret should be a loud startup crash, never a
++  silent "oh well, I'll use something weak instead."
++*/
+ const envSchema = z.object({
++  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+   PORT: z.string().default('4000'),
+   DATABASE_URL: z.string().url().optional(),
+   REDIS_URL: z.string().url().optional(),
+   API_URL: z.string().url().optional(),
+   CORS_ORIGIN: z.string().optional(),
++  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
+ });
+ 
+ const env = envSchema.parse(process.env);
+ 
+ export const config = {
++  nodeEnv: env.NODE_ENV,
++  isProduction: env.NODE_ENV === 'production',
+   port: Number(env.PORT),
+   databaseUrl: env.DATABASE_URL,
+   redisUrl: env.REDIS_URL,
+   apiUrl: env.API_URL,
+   corsOrigin: env.CORS_ORIGIN ?? 'http://localhost:3000',
++  jwtSecret: env.JWT_SECRET,
+ };
+diff --git a/apps/api/src/controllers/adminController.ts b/apps/api/src/controllers/adminController.ts
+new file mode 100644
+index 0000000..6617ebf
+--- /dev/null
++++ b/apps/api/src/controllers/adminController.ts
+@@ -0,0 +1,94 @@
++import type { Request, Response } from 'express';
++
++import { config } from '../config/index.js';
++import { signAdminToken, verifyPassword } from '../lib/auth.js';
++import { HttpError } from '../lib/httpError.js';
++import { prisma } from '../lib/prisma.js';
++import type { AdminLoginInput, ModerateReviewInput } from '../validation/review.js';
++
++// Shared cookie settings, used by both login (to set the cookie) and
++// logout (to clear it) — keeping them in one place means login and
++// logout can never accidentally disagree about the cookie's settings.
++const ADMIN_COOKIE_NAME = 'admin_token';
++const adminCookieOptions = {
++  httpOnly: true, // invisible to JavaScript — see requireAdmin.ts for why this matters
++  secure: config.isProduction, // only sent over HTTPS once deployed for real; localhost dev uses plain HTTP
++  sameSite: 'lax' as const, // blocks the cookie being sent along with cross-site requests, a defense against CSRF
++  maxAge: 8 * 60 * 60 * 1000, // 8 hours, matching the token's own expiry in lib/auth.ts
++};
++
++/*
++  Explainer: POST /api/v1/admin/login. On success, we don't send the
++  token back as JSON for the frontend to store itself (e.g. in
++  localStorage) — storing tokens in localStorage is readable by any
++  JavaScript on the page, including injected malicious scripts. Instead
++  we set it directly as an httpOnly cookie ourselves, which the browser
++  then automatically attaches to every future request to our API,
++  without any frontend code ever touching the token's actual value.
++*/
++export async function adminLogin(req: Request, res: Response) {
++  const { email, password } = req.body as AdminLoginInput;
++
++  const admin = await prisma.admin.findUnique({ where: { email } });
++
++  // Deliberately identical error whether the email doesn't exist OR the
++  // password is wrong. Telling an attacker "that email isn't registered"
++  // vs "wrong password" leaks which emails are valid admin accounts —
++  // a real information leak, even though it seems like a small detail.
++  if (!admin || !(await verifyPassword(password, admin.passwordHash))) {
++    throw new HttpError(401, 'Invalid email or password');
++  }
++
++  const token = signAdminToken({ adminId: admin.id, email: admin.email });
++  res.cookie(ADMIN_COOKIE_NAME, token, adminCookieOptions);
++
++  res.json({ status: 'success', message: 'Logged in' });
++}
++
++export async function adminLogout(_req: Request, res: Response) {
++  res.clearCookie(ADMIN_COOKIE_NAME, adminCookieOptions);
++  res.json({ status: 'success', message: 'Logged out' });
++}
++
++/*
++  Explainer: GET /api/v1/admin/reviews — the moderation queue. This
++  route is only reachable at all if the requireAdmin middleware already
++  let the request through, so by the time this function runs, we already
++  know it's a genuine logged-in admin asking.
++*/
++export async function listPendingReviews(_req: Request, res: Response) {
++  const reviews = await prisma.review.findMany({
++    where: { status: 'PENDING' },
++    orderBy: { createdAt: 'asc' }, // oldest-first — first come, first reviewed
++  });
++
++  res.json({ status: 'success', data: reviews });
++}
++
++/*
++  Explainer: PATCH /api/v1/admin/reviews/:id — an admin clicking
++  approve or reject on one specific review. `req.admin.email` here comes
++  from the requireAdmin middleware, which decoded it from that admin's
++  own token — so `moderatedBy` always accurately records exactly which
++  admin made the call, useful if this ever needs auditing later.
++*/
++export async function moderateReview(req: Request, res: Response) {
++  const { id } = req.params;
++  const { action } = req.body as ModerateReviewInput;
++
++  const existing = await prisma.review.findUnique({ where: { id } });
++  if (!existing) {
++    throw new HttpError(404, 'Review not found');
++  }
++
++  const review = await prisma.review.update({
++    where: { id },
++    data: {
++      status: action === 'approve' ? 'APPROVED' : 'REJECTED',
++      moderatedAt: new Date(),
++      moderatedBy: req.admin?.email,
++    },
++  });
++
++  res.json({ status: 'success', data: review });
++}
+diff --git a/apps/api/src/controllers/reviewController.ts b/apps/api/src/controllers/reviewController.ts
+new file mode 100644
+index 0000000..7d5c627
+--- /dev/null
++++ b/apps/api/src/controllers/reviewController.ts
+@@ -0,0 +1,88 @@
++import type { Request, Response } from 'express';
++
++import { prisma } from '../lib/prisma.js';
++import type { SubmitReviewInput } from '../validation/review.js';
++
++/*
++  Explainer: this handles POST /api/v1/artists/:artistId/reviews — a
++  customer submitting a new review. By the time this function runs, the
++  validateBody middleware has ALREADY confirmed req.body matches
++  submitReviewSchema exactly, so we can trust every field here without
++  re-checking it.
++
++  Notice there is no `status` field being set from the request — status
++  always starts as PENDING, decided by the database schema's default,
++  never by anything the visitor sends. That's deliberate: nothing in
++  this function even gives a submitter the ABILITY to mark their own
++  review as approved, even by accident or by tampering with the request.
++*/
++export async function submitReview(req: Request, res: Response) {
++  const { artistId } = req.params;
++  const input = req.body as SubmitReviewInput;
++
++  const review = await prisma.review.create({
++    data: {
++      artistId,
++      authorName: input.authorName,
++      authorEmail: input.authorEmail,
++      rating: input.rating,
++      comment: input.comment,
++    },
++  });
++
++  res.status(201).json({
++    status: 'success',
++    message: 'Thanks! Your review will appear once it has been approved.',
++    data: {
++      id: review.id,
++      status: review.status,
++    },
++  });
++}
++
++/*
++  Explainer: this handles GET /api/v1/artists/:artistId/reviews — what
++  the public artist profile page will eventually call. The
++  `status: 'APPROVED'` line below is the entire enforcement of "only
++  approved reviews are public" — it's a hard filter baked directly into
++  the database query itself, not a check we remember to add in the
++  frontend. Even a bug elsewhere in the app couldn't accidentally leak a
++  pending or rejected review through this endpoint.
++*/
++export async function listApprovedReviews(req: Request, res: Response) {
++  const { artistId } = req.params;
++
++  // Basic pagination — without this, an artist with thousands of
++  // reviews would force every visitor to download all of them at once.
++  // ?page=2&pageSize=10 lets the frontend request one page at a time.
++  const page = Math.max(1, Number(req.query.page) || 1);
++  const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize) || 10));
++
++  const [reviews, total] = await Promise.all([
++    prisma.review.findMany({
++      where: { artistId, status: 'APPROVED' },
++      orderBy: { createdAt: 'desc' },
++      skip: (page - 1) * pageSize,
++      take: pageSize,
++      select: {
++        id: true,
++        authorName: true,
++        rating: true,
++        comment: true,
++        createdAt: true,
++      },
++    }),
++    prisma.review.count({ where: { artistId, status: 'APPROVED' } }),
++  ]);
++
++  res.json({
++    status: 'success',
++    data: reviews,
++    pagination: {
++      page,
++      pageSize,
++      total,
++      totalPages: Math.ceil(total / pageSize),
++    },
++  });
++}
+diff --git a/apps/api/src/lib/asyncHandler.ts b/apps/api/src/lib/asyncHandler.ts
+new file mode 100644
+index 0000000..f0c6ed4
+--- /dev/null
++++ b/apps/api/src/lib/asyncHandler.ts
+@@ -0,0 +1,22 @@
++import type { NextFunction, Request, Response } from 'express';
++
++/*
++  Explainer: Express was originally built before `async/await` existed
++  in JavaScript, so it has a gap — if an `async` function throws (or a
++  Promise it's awaiting rejects), Express does NOT automatically catch
++  that and hand it to our errorHandler middleware. Without this wrapper,
++  an error thrown inside, say, submitReview would just vanish into an
++  "unhandled promise rejection" instead of turning into a proper error
++  response for the visitor.
++
++  This function solves it once, in one place: wrap any async controller
++  with asyncHandler(...), and any error it throws gets correctly forwarded
++  to next(err) — which is exactly what routes to our errorHandler.
++*/
++type AsyncRouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
++
++export function asyncHandler(handler: AsyncRouteHandler) {
++  return (req: Request, res: Response, next: NextFunction) => {
++    handler(req, res, next).catch(next);
++  };
++}
+diff --git a/apps/api/src/lib/auth.ts b/apps/api/src/lib/auth.ts
+new file mode 100644
+index 0000000..4a13cf2
+--- /dev/null
++++ b/apps/api/src/lib/auth.ts
+@@ -0,0 +1,64 @@
++import bcrypt from 'bcryptjs';
++import jwt from 'jsonwebtoken';
++
++import { config } from '../config/index.js';
++
++/*
++  Explainer: this file holds every function related to "proving someone
++  really is who they say they are" — hashing/checking passwords, and
++  issuing/verifying the token that says "this request is genuinely from
++  a logged-in admin". Keeping all of it in one small file means there's
++  exactly one place in the whole codebase that touches passwords or
++  tokens directly — easier to review, easier to audit, easier to trust.
++*/
++
++// How much computational "work" bcrypt does per password — higher is
++// slower (and therefore safer against brute-force guessing) but also
++// slower for real logins. 12 is a well-established, industry-standard
++// middle ground as of today.
++const BCRYPT_SALT_ROUNDS = 12;
++
++/*
++  Explainer: we NEVER store a password as plain text — if our database
++  ever leaked, plain-text passwords would hand attackers everyone's
++  actual password immediately. Hashing turns a password into a
++  one-way scrambled version: easy to check "does this match?", but
++  computationally infeasible to reverse back into the original password.
++*/
++export async function hashPassword(plainPassword: string): Promise<string> {
++  return bcrypt.hash(plainPassword, BCRYPT_SALT_ROUNDS);
++}
++
++export async function verifyPassword(plainPassword: string, passwordHash: string): Promise<boolean> {
++  return bcrypt.compare(plainPassword, passwordHash);
++}
++
++export type AdminTokenPayload = {
++  adminId: string;
++  email: string;
++};
++
++/*
++  Explainer: a JWT (JSON Web Token) is a signed, tamper-proof piece of
++  text — think of it like a wristband at a concert. It has information
++  printed on it (which admin this is), and it's signed with our secret
++  key so that anyone trying to forge or edit one produces an invalid
++  signature that our server immediately rejects. The token expires after
++  8 hours, so even a stolen one becomes useless before too long.
++*/
++export function signAdminToken(payload: AdminTokenPayload): string {
++  return jwt.sign(payload, config.jwtSecret, { expiresIn: '8h' });
++}
++
++export function verifyAdminToken(token: string): AdminTokenPayload | null {
++  try {
++    return jwt.verify(token, config.jwtSecret) as AdminTokenPayload;
++  } catch {
++    // Any failure here (expired, tampered with, signed with a different
++    // secret, malformed) is treated identically: "not a valid admin
++    // session." We deliberately don't distinguish the reasons to the
++    // caller — that information isn't useful to a legitimate user and
++    // is exactly the kind of detail that helps an attacker.
++    return null;
++  }
++}
+diff --git a/apps/api/src/lib/httpError.ts b/apps/api/src/lib/httpError.ts
+new file mode 100644
+index 0000000..27973ab
+--- /dev/null
++++ b/apps/api/src/lib/httpError.ts
+@@ -0,0 +1,17 @@
++/*
++  Explainer: a normal JavaScript Error doesn't have a concept of
++  "HTTP status code" — this small class adds one. Throwing
++  `new HttpError(404, 'Review not found')` anywhere in a controller lets
++  the existing errorHandler middleware (in middleware/errorHandler.ts)
++  automatically turn it into the correct HTTP response, without every
++  controller needing to know how to format a response itself.
++*/
++export class HttpError extends Error {
++  status: number;
++
++  constructor(status: number, message: string) {
++    super(message);
++    this.status = status;
++    this.name = 'HttpError';
++  }
++}
+diff --git a/apps/api/src/lib/prisma.ts b/apps/api/src/lib/prisma.ts
+new file mode 100644
+index 0000000..ff82fe7
+--- /dev/null
++++ b/apps/api/src/lib/prisma.ts
+@@ -0,0 +1,12 @@
++import { PrismaClient } from '@prisma/client';
++
++/*
++  Explainer: PrismaClient is the object our code uses to actually talk
++  to the database ("give me all approved reviews for artist-01", etc).
++  Creating one of these objects opens a small pool of real connections
++  to Postgres — so we want exactly ONE of them shared across the whole
++  app, not a new one created every time a file needs it. This file is
++  that single shared instance; every controller imports `prisma` from
++  here rather than creating its own.
++*/
++export const prisma = new PrismaClient();
+diff --git a/apps/api/src/middleware/requireAdmin.ts b/apps/api/src/middleware/requireAdmin.ts
+new file mode 100644
+index 0000000..9f50ec5
+--- /dev/null
++++ b/apps/api/src/middleware/requireAdmin.ts
+@@ -0,0 +1,52 @@
++import type { NextFunction, Request, Response } from 'express';
++
++import { verifyAdminToken } from '../lib/auth.js';
++import { HttpError } from '../lib/httpError.js';
++
++// Extends Express's built-in Request type so TypeScript knows about the
++// `admin` property this middleware attaches — without this, code later
++// in the chain (like the moderation controller) couldn't safely read
++// `req.admin` without a type error.
++declare global {
++  // eslint-disable-next-line @typescript-eslint/no-namespace
++  namespace Express {
++    interface Request {
++      admin?: { adminId: string; email: string };
++    }
++  }
++}
++
++/*
++  Explainer: this is the security gate for every admin-only endpoint.
++  It runs BEFORE the actual controller (like "approve this review") and
++  answers one question: does this request have a valid, un-expired,
++  correctly-signed admin token? If yes, it attaches who the admin is to
++  `req.admin` and lets the request continue. If no — for any reason at
++  all — it stops the request immediately with a 401 and the controller
++  code never even runs.
++
++  The token itself comes from an httpOnly cookie (set during login),
++  rather than being readable by JavaScript in the browser at all — that
++  specifically protects against XSS attacks: even if a malicious script
++  somehow ran on the admin's page, it could not read this cookie to
++  steal the token, because httpOnly cookies are invisible to JavaScript
++  entirely, by browser design.
++*/
++export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
++  const token = req.cookies?.admin_token as string | undefined;
++
++  if (!token) {
++    next(new HttpError(401, 'Admin login required'));
++    return;
++  }
++
++  const payload = verifyAdminToken(token);
++
++  if (!payload) {
++    next(new HttpError(401, 'Admin session is invalid or has expired'));
++    return;
++  }
++
++  req.admin = payload;
++  next();
++}
+diff --git a/apps/api/src/middleware/reviewRateLimiter.ts b/apps/api/src/middleware/reviewRateLimiter.ts
+new file mode 100644
+index 0000000..e5b2741
+--- /dev/null
++++ b/apps/api/src/middleware/reviewRateLimiter.ts
+@@ -0,0 +1,28 @@
++import rateLimit from 'express-rate-limit';
++
++/*
++  Explainer: rate limiting answers the question "how many times can the
++  SAME visitor hit this specific endpoint in a short window of time?"
++  Without it, one person (or a bot) could submit hundreds of fake
++  reviews in seconds — flooding the admin's moderation queue and making
++  it impractical to review real feedback. This limits any single visitor
++  to 5 review submissions per 15 minutes; a genuine customer leaving one
++  honest review is completely unaffected, while a spam attempt hits a
++  wall almost immediately.
++
++  Note this is layered on TOP of admin approval, not instead of it —
++  even a submission that gets through rate limiting still starts as
++  PENDING and stays invisible until an admin approves it. Rate limiting
++  protects the moderation queue itself from being flooded; approval
++  protects the public page from ever showing something unapproved.
++*/
++export const reviewRateLimiter = rateLimit({
++  windowMs: 15 * 60 * 1000, // 15 minutes
++  limit: 5,
++  standardHeaders: true, // tells the caller their remaining quota via response headers
++  legacyHeaders: false,
++  message: {
++    status: 'error',
++    message: 'Too many reviews submitted recently. Please try again later.',
++  },
++});
+diff --git a/apps/api/src/middleware/validate.ts b/apps/api/src/middleware/validate.ts
+new file mode 100644
+index 0000000..eda6595
+--- /dev/null
++++ b/apps/api/src/middleware/validate.ts
+@@ -0,0 +1,36 @@
++import type { NextFunction, Request, Response } from 'express';
++import type { ZodSchema } from 'zod';
++
++import { HttpError } from '../lib/httpError.js';
++
++/*
++  Explainer: this is a small "factory" — a function that builds a
++  middleware function, customized for whatever schema you hand it. This
++  pattern means we write the "check the request body against a schema,
++  and reject it clearly if it fails" logic exactly ONCE, and reuse it for
++  every endpoint that needs validation (review submission, admin login,
++  moderation actions) rather than repeating similar validation code in
++  every single controller.
++
++  Usage: router.post('/reviews', validateBody(submitReviewSchema), submitReview)
++*/
++export function validateBody<T>(schema: ZodSchema<T>) {
++  return (req: Request, _res: Response, next: NextFunction) => {
++    const result = schema.safeParse(req.body);
++
++    if (!result.success) {
++      // .issues[0] is the FIRST validation problem Zod found — showing
++      // just one clear message is friendlier than dumping a wall of
++      // every possible error at once.
++      const firstIssue = result.error.issues[0];
++      next(new HttpError(400, firstIssue?.message ?? 'Invalid request body'));
++      return;
++    }
++
++    // Replace the raw, untrusted body with the parsed, validated,
++    // correctly-typed version — everything downstream (the controller)
++    // can now trust req.body completely.
++    req.body = result.data;
++    next();
++  };
++}
+diff --git a/apps/api/src/routes/admin.ts b/apps/api/src/routes/admin.ts
+new file mode 100644
+index 0000000..a3613e1
+--- /dev/null
++++ b/apps/api/src/routes/admin.ts
+@@ -0,0 +1,32 @@
++import { Router } from 'express';
++
++import {
++  adminLogin,
++  adminLogout,
++  listPendingReviews,
++  moderateReview,
++} from '../controllers/adminController.js';
++import { asyncHandler } from '../lib/asyncHandler.js';
++import { requireAdmin } from '../middleware/requireAdmin.js';
++import { validateBody } from '../middleware/validate.js';
++import { adminLoginSchema, moderateReviewSchema } from '../validation/review.js';
++
++export const adminRouter = Router();
++
++// Login and logout are deliberately NOT behind requireAdmin — you can't
++// be required to already be logged in just to log in.
++adminRouter.post('/login', validateBody(adminLoginSchema), asyncHandler(adminLogin));
++adminRouter.post('/logout', asyncHandler(adminLogout));
++
++// Every route below this line runs requireAdmin FIRST. Because
++// router.use() applies to every route defined after it in this file,
++// we don't have to repeat `requireAdmin` on each individual line — one
++// declaration protects everything underneath it.
++adminRouter.use(requireAdmin);
++
++adminRouter.get('/reviews', asyncHandler(listPendingReviews));
++adminRouter.patch(
++  '/reviews/:id',
++  validateBody(moderateReviewSchema),
++  asyncHandler(moderateReview),
++);
+diff --git a/apps/api/src/routes/index.ts b/apps/api/src/routes/index.ts
+index 476b2a8..3487d1a 100644
+--- a/apps/api/src/routes/index.ts
++++ b/apps/api/src/routes/index.ts
+@@ -1,7 +1,16 @@
+ import { Router } from 'express';
++
+ import { healthRouter } from './health.js';
++import { reviewsRouter } from './reviews.js';
++import { adminRouter } from './admin.js';
+ 
+ const router = Router();
++
+ router.use('/health', healthRouter);
++// Reviews are nested under /artists — matches how the frontend already
++// thinks about the data (an artist HAS reviews), and reads naturally:
++// POST /api/v1/artists/artist-01/reviews
++router.use('/artists', reviewsRouter);
++router.use('/admin', adminRouter);
+ 
+ export { router };
+diff --git a/apps/api/src/routes/reviews.ts b/apps/api/src/routes/reviews.ts
+new file mode 100644
+index 0000000..fb7f564
+--- /dev/null
++++ b/apps/api/src/routes/reviews.ts
+@@ -0,0 +1,27 @@
++import { Router } from 'express';
++
++import { listApprovedReviews, submitReview } from '../controllers/reviewController.js';
++import { asyncHandler } from '../lib/asyncHandler.js';
++import { reviewRateLimiter } from '../middleware/reviewRateLimiter.js';
++import { validateBody } from '../middleware/validate.js';
++import { submitReviewSchema } from '../validation/review.js';
++
++export const reviewsRouter = Router();
++
++/*
++  Explainer: notice the order of the middleware list on the POST route
++  below — it runs left to right, like steps in a checklist:
++    1. reviewRateLimiter  — is this visitor submitting too often?
++    2. validateBody(...)  — is the data itself well-formed?
++    3. asyncHandler(...)  — actually create the review (only reached if
++       both checks above passed)
++  A request that fails step 1 or 2 never reaches step 3 at all.
++*/
++reviewsRouter.post(
++  '/:artistId/reviews',
++  reviewRateLimiter,
++  validateBody(submitReviewSchema),
++  asyncHandler(submitReview),
++);
++
++reviewsRouter.get('/:artistId/reviews', asyncHandler(listApprovedReviews));
+diff --git a/apps/api/src/validation/review.ts b/apps/api/src/validation/review.ts
+new file mode 100644
+index 0000000..f6d9871
+--- /dev/null
++++ b/apps/api/src/validation/review.ts
+@@ -0,0 +1,45 @@
++import { z } from 'zod';
++
++/*
++  Explainer: this is a checklist our server runs every incoming review
++  submission through BEFORE it ever gets near the database. If a
++  submission fails any rule here, it's rejected immediately with a clear
++  error — the database, and every other part of the app, only ever sees
++  data that's already known to be well-formed. This is the single most
++  important defense against both honest mistakes (a typo'd email) and
++  deliberate abuse (someone trying to submit a 50,000-character comment
++  to disrupt the site).
++*/
++export const submitReviewSchema = z.object({
++  authorName: z.string().trim().min(2, 'Name is too short').max(80, 'Name is too long'),
++  authorEmail: z.string().trim().email('Not a valid email address'),
++  rating: z
++    .number()
++    .int('Rating must be a whole number')
++    .min(1, 'Rating must be at least 1')
++    .max(5, 'Rating must be at most 5'),
++  comment: z.string().trim().min(10, 'Review is too short').max(1000, 'Review is too long'),
++});
++
++export type SubmitReviewInput = z.infer<typeof submitReviewSchema>;
++
++/*
++  Explainer: this one validates the OTHER direction — when an admin
++  clicks approve/reject, we check that the request actually says
++  "approve" or "reject" and nothing else. z.enum() is the TypeScript/Zod
++  version of the ReviewStatus enum we defined in the database — this is
++  what stops a malformed or malicious request from ever reaching the
++  database update itself.
++*/
++export const moderateReviewSchema = z.object({
++  action: z.enum(['approve', 'reject']),
++});
++
++export type ModerateReviewInput = z.infer<typeof moderateReviewSchema>;
++
++export const adminLoginSchema = z.object({
++  email: z.string().trim().email('Not a valid email address'),
++  password: z.string().min(1, 'Password is required'),
++});
++
++export type AdminLoginInput = z.infer<typeof adminLoginSchema>;

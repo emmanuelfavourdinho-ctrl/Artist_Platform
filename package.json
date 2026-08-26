@@ -37,5 +37,9 @@
     "eslint-plugin-prettier": "^5.0.0",
     "prettier": "^3.0.0",
     "typescript": "5.5.4"
+  },
+  "dependencies": {
+    "next-cloudinary": "^6.18.8",
+    "redis": "^6.2.1"
   }
 }

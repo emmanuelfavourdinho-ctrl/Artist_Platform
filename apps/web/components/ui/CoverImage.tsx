@@ -3,6 +3,8 @@
 import Image from 'next/image';
 import { useState } from 'react';
 
+import { cloudinaryLoader } from '../../lib/cloudinaryLoader';
+
 /*
     Explainer: this is the one place in the whole codebase that knows how
     to show a photo. Every artist portrait, artwork photo, category tile,
@@ -25,6 +27,13 @@ import { useState } from 'react';
     3. GRACEFUL FALLBACK — if a photo file hasn't been added yet (see the
         README files in each public/images folder), this shows a plain
         "Image coming soon" panel instead of a broken-image icon.
+
+    4. CLOUDINARY-AWARE — if `src` is a Cloudinary delivery URL (real
+        artwork/artist photos come from there), width/format/quality
+        transforms are handled by Cloudinary's own CDN via a per-image
+        loader, instead of Next's built-in image optimizer. Local /public
+        images (like the hero photos) are untouched and still go through
+        Next's normal optimizer, exactly as before.
     */
 
 type CoverImageProps = {
@@ -47,6 +56,8 @@ export function CoverImage({ src, alt, priority = false, className = '', sizes }
   // start in 'loading', and the browser tells us (via onLoad/onError)
   // which of the other two states to move to.
   const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>('loading');
+
+  const isCloudinary = src.includes('res.cloudinary.com');
 
   if (status === 'failed') {
     return (
@@ -86,6 +97,7 @@ export function CoverImage({ src, alt, priority = false, className = '', sizes }
         alt={alt}
         fill
         priority={priority}
+        loader={isCloudinary ? cloudinaryLoader : undefined}
         // Next.js doesn't allow `priority` and `loading` to be set at
         // the same time (priority already implies "load this now").
         // So: the hero's first slide gets `loading={undefined}` (i.e.

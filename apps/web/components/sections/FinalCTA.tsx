@@ -34,7 +34,7 @@ export function FinalCTA() {
             Build your presence. Share your work. Find your audience.
           </p>
           <div className="mt-9 flex justify-center">
-            <Button href="/" variant="primary">
+            <Button href="/register" variant="primary">
               Join Artist_Platform
             </Button>
           </div>

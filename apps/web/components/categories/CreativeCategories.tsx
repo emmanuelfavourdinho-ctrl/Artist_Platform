@@ -22,8 +22,16 @@ export function CreativeCategories() {
         <div className="mt-14 grid grid-cols-2 gap-4 md:grid-cols-3">
           {categories.map((category, index) => (
             <Reveal key={category.id} delay={index * 60}>
+              {/*
+                Note: pointing at /gallery generally, not
+                /gallery?category=<slug>, since I haven't seen
+                data/categories.ts and can't confirm the field name for
+                a category's real slug matches the backend's Category
+                model. Share that file and this becomes a real per-
+                category filter link in one line.
+              */}
               <Link
-                href="/"
+                href="/gallery"
                 className="group relative block aspect-[4/3] overflow-hidden rounded-md focus-visible:outline-2"
               >
                 <div className="h-full w-full opacity-70 transition-all duration-500 ease-cinematic group-hover:scale-105 group-hover:opacity-100">

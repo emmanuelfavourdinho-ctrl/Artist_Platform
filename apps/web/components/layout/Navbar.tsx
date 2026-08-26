@@ -6,10 +6,14 @@ import { useState } from 'react';
 
 import { useScrolled } from '../../hooks/useScrolled';
 
+// Discover and Marketplace both point at /gallery for now — that's the
+// only real browsing page built so far. Artists and Community have no
+// page yet, so they point home rather than a route that doesn't exist
+// (Next's typed routes would fail the build on a fabricated path).
 const NAV_LINKS: { label: string; href: Route }[] = [
-  { label: 'Discover', href: '/' },
+  { label: 'Discover', href: '/gallery' },
   { label: 'Artists', href: '/' },
-  { label: 'Marketplace', href: '/' },
+  { label: 'Marketplace', href: '/gallery' },
   { label: 'Community', href: '/' },
 ];
 
@@ -28,7 +32,9 @@ export function Navbar() {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-colors duration-500 ease-cinematic ${
-        scrolled ? 'bg-background/90 backdrop-blur-md border-b border-foreground/10' : 'bg-transparent'
+        scrolled
+          ? 'bg-background/90 backdrop-blur-md border-b border-foreground/10'
+          : 'bg-transparent'
       }`}
     >
       <nav
@@ -64,13 +70,13 @@ export function Navbar() {
             <SearchIcon />
           </button>
           <Link
-            href="/"
+            href="/login"
             className="text-[13px] font-medium uppercase tracking-[0.12em] text-foreground/80 transition-colors duration-200 hover:text-foreground"
           >
             Log in
           </Link>
           <Link
-            href="/"
+            href="/register"
             className="rounded-full border border-foreground/30 px-5 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-foreground transition-colors duration-200 hover:border-accent hover:text-accent"
           >
             Join Artist
@@ -107,11 +113,16 @@ export function Navbar() {
             ))}
           </ul>
           <div className="mt-6 flex flex-col gap-3 border-t border-foreground/10 pt-6">
-            <Link href="/" className="text-sm uppercase tracking-[0.12em] text-foreground/80">
+            <Link
+              href="/login"
+              onClick={() => setMenuOpen(false)}
+              className="text-sm uppercase tracking-[0.12em] text-foreground/80"
+            >
               Log in
             </Link>
             <Link
-              href="/"
+              href="/register"
+              onClick={() => setMenuOpen(false)}
               className="rounded-full bg-accent px-5 py-3 text-center text-sm font-medium uppercase tracking-[0.12em] text-accent-foreground"
             >
               Join Artist
