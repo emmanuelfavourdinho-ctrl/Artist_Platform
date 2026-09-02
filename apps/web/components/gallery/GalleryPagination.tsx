@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import type { Pagination } from '../../lib/artworksApi';
 
 interface GalleryPaginationProps {
@@ -14,7 +15,7 @@ export function GalleryPagination({ pagination, buildHref }: GalleryPaginationPr
       {Array.from({ length: pagination.totalPages }, (_, index) => index + 1).map((pageNumber) => (
         <Link
           key={pageNumber}
-          href={buildHref(pageNumber)}
+          href={buildHref(pageNumber) as Route}
           aria-current={pageNumber === pagination.page ? 'page' : undefined}
           className={`flex h-9 w-9 items-center justify-center rounded-full text-sm transition-colors duration-200 ${
             pageNumber === pagination.page

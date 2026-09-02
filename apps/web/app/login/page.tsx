@@ -10,6 +10,7 @@ import { AuthSubmitButton } from '../../components/auth/AuthSubmitButton';
 import { FormAlert } from '../../components/auth/FormAlert';
 import { Reveal } from '../../components/ui/Reveal';
 import { fieldErrorsFrom, type ApiErrorBody } from '../../lib/apiTypes';
+import { resolveAuthDestination, type AuthSuccessBody } from '../../lib/authRouting';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,7 +42,8 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/');
+      const body = data as AuthSuccessBody;
+      router.push(resolveAuthDestination(body));
       router.refresh();
     } catch {
       setFormError('Could not reach the server. Check your connection and try again.');
@@ -105,7 +107,7 @@ export default function LoginPage() {
       <Reveal delay={200}>
         <p className="mt-8 text-center text-sm text-muted">
           Need an account?{' '}
-          <Link href="/register" className="font-medium text-accent underline underline-offset-2">
+          <Link href="/welcome" className="font-medium text-accent underline underline-offset-2">
             Create one
           </Link>
         </p>

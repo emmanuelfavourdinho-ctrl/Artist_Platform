@@ -6,11 +6,6 @@ interface FooterLink {
   href: Route;
 }
 
-// Every link previously pointed at '/' regardless of its label. Wired
-// to real destinations where they exist (Discover/Marketplace →
-// /gallery); everything else still has no page built yet, so it points
-// home rather than a route that doesn't exist and would fail the
-// typed-routes build.
 const COLUMNS: { heading: string; links: FooterLink[] }[] = [
   {
     heading: 'Platform',
@@ -24,15 +19,15 @@ const COLUMNS: { heading: string; links: FooterLink[] }[] = [
   {
     heading: 'Company',
     links: [
-      { label: 'About', href: '/' },
-      { label: 'Contact', href: '/' },
+      { label: 'About', href: '/about' },
+      { label: 'Contact', href: '/contact' },
     ],
   },
   {
     heading: 'Legal',
     links: [
-      { label: 'Privacy', href: '/' },
-      { label: 'Terms', href: '/' },
+      { label: 'Privacy', href: '/privacy' },
+      { label: 'Terms', href: '/terms' },
     ],
   },
 ];
@@ -44,7 +39,7 @@ export function Footer() {
         <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
             <p className="font-display text-lg tracking-[0.08em] text-foreground">
-              ARTIST<span className="text-accent">_</span>PLATFORM
+              Fine<span className="text-accent">_</span>Arts
             </p>
             <p className="mt-4 max-w-xs text-sm leading-6 text-muted">
               A creative home for artists to showcase work, find opportunity, and build an audience
@@ -90,10 +85,9 @@ export function Footer() {
         </div>
 
         <div className="mt-16 flex flex-col gap-3 border-t border-foreground/10 pt-8 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Artist_Platform. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} FineArts. All rights reserved.</p>
           <p>Made for people who make things.</p>
-          <br />
-          <p> powered By EMMATECH</p>
+          <p>Powered by EMMATECH</p>
         </div>
       </div>
     </footer>

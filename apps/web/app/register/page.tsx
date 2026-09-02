@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 import { AuthLayout } from '../../components/auth/AuthLayout';
@@ -10,9 +10,24 @@ import { AuthSubmitButton } from '../../components/auth/AuthSubmitButton';
 import { FormAlert } from '../../components/auth/FormAlert';
 import { Reveal } from '../../components/ui/Reveal';
 import { fieldErrorsFrom, type ApiErrorBody } from '../../lib/apiTypes';
+import { resolveAuthDestination, type AuthSuccessBody } from '../../lib/authRouting';
+
+type Intent = 'artist' | 'buyer';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawIntent = searchParams.get('intent');
+  const intent: Intent | null = rawIntent === 'artist' || rawIntent === 'buyer' ? rawIntent : null;
+
+  // No valid intent in the URL — send them through the choice first
+  // rather than silently defaulting to one (defaulting is how the old
+  // flow ended up with every signup as BUYER with no way to signal
+  // otherwise).
+  useEffect(() => {
+    if (!intent) router.replace('/welcome');
+  }, [intent, router]);
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -20,6 +35,8 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  if (!intent) return null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,7 +48,13 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, lastName, email, password }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email,
+          password,
+          intent: intent.toUpperCase(),
+        }),
       });
 
       const data = await res.json();
@@ -43,14 +66,17 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push('/');
+      const body = data as AuthSuccessBody;
       router.refresh();
+      router.push(resolveAuthDestination(body));
     } catch {
       setFormError('Could not reach the server. Check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
   }
+
+  const isArtist = intent === 'artist';
 
   return (
     <AuthLayout
@@ -59,10 +85,18 @@ export default function RegisterPage() {
     >
       <Reveal>
         <p className="text-[13px] font-medium uppercase tracking-[0.3em] text-accent">
-          Join Artist_Platform
+          {isArtist ? 'Join as an Artist' : 'Join Artist_Platform'}
         </p>
         <h1 className="mt-3 font-display text-4xl leading-[1.05] text-foreground">
-          Create your <span className="italic text-accent">presence.</span>
+          {isArtist ? (
+            <>
+              Showcase your <span className="italic text-accent">work.</span>
+            </>
+          ) : (
+            <>
+              Create your <span className="italic text-accent">presence.</span>
+            </>
+          )}
         </h1>
       </Reveal>
 

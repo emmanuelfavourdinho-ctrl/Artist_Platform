@@ -2,13 +2,14 @@ import './globals.css';
 
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { CartProvider } from '@/context/CartContext';
 
 export const metadata: Metadata = {
-  title: 'Artist_Platform — Where creativity finds its audience',
+  title: 'FineArts — Where creativity finds its audience',
   description:
     'A creative ecosystem for discovering artists, showcasing work, building connections, and turning creativity into opportunity.',
   openGraph: {
-    title: 'Artist_Platform — Where creativity finds its audience',
+    title: 'FineArts — Where creativity finds its audience',
     description:
       'A creative ecosystem for discovering artists, showcasing work, building connections, and turning creativity into opportunity.',
     type: 'website',
@@ -20,8 +21,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body className="font-body">{children}</body>
+    <html lang="en" data-scroll-behavior="smooth">
+      <body className="font-body">
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   );
 }

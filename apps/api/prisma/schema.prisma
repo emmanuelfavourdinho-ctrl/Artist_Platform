@@ -7,47 +7,73 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-//   ===========================================================================
-//   READ ME FIRST — a few decisions made while turning the spec into real code
-//   ===========================================================================
+// ===========================================================================
+// READ ME FIRST — design decisions a new maintainer should know before
+// changing this file. Keep this section updated as decisions change; a
+// schema this large is much harder to reason about without it.
+// ===========================================================================
 //
-//   1. IDs: every model uses `id String @id @default(uuid())` — a randomly
-//      generated, globally-unique identifier, as requested.
+// 1. IDs: every model uses `id String @id @default(uuid())` — a randomly
+//    generated, globally-unique identifier. Consistent across the whole
+//    schema; don't introduce auto-increment ints for a new model.
 //
-//   2. Money: every monetary field uses `Decimal @db.Decimal(12, 2)`, never
-//      Float. Floats store money as an *approximation* (ask any engineer
-//      about the classic "0.1 + 0.2 != 0.3" bug) — completely unacceptable
-//      once real currency is involved. Decimal stores the exact value.
+// 2. Money: every monetary field is `Decimal @db.Decimal(12, 2)`, never
+//    Float. Floats store money as an approximation ("0.1 + 0.2 != 0.3").
+//    IMPORTANT for API/frontend authors: Prisma serializes Decimal to
+//    JSON as a STRING, not a number — always `Number(value)` before
+//    formatting or doing arithmetic in TypeScript.
 //
-//   3. Currency codes (USD, EUR, XAF, ...) are plain `String`, not an enum.
-//      There are 150+ real-world currency codes, and Postgres enums are
-//      painful to extend later (they need a migration to add one new
-//      value) — a plain, validated-at-the-application-layer string is the
-//      pragmatic choice here.
+// 3. Currency codes (USD, EUR, XAF, ...) are plain `String`, not an enum —
+//    150+ real codes exist and Postgres enums need a migration to add a
+//    single new value. Validate the code at the application layer instead.
 //
-//   4. Pure "junction" tables that only ever connect two other records with
-//      nothing of their own worth looking up individually (UserRole,
-//      RolePermission, ArtworkCategory, ArtworkStyle, ArtworkTheme,
-//      Favorite) use a COMPOSITE PRIMARY KEY — e.g. `@@id([userId, roleId])`
-//      — instead of a separate synthetic id column. That composite key is
-//      already guaranteed unique by definition, so it satisfies "no
-//      duplicate pairs" without needing a second, redundant unique
-//      constraint. CartItem is the one exception, because the spec
-//      explicitly listed a separate `id` field for it.
+// 4. STRING vs ENUM, the actual rule we follow: use a Postgres enum when
+//    the set of values is small, fixed, and changing it SHOULD require a
+//    deliberate migration (order status, verification status, review
+//    status — these are core business states, and a typo here should be
+//    a compile-time error, not a silent bad write). Use a plain String
+//    when the set of values is expected to grow over time via normal
+//    product/admin activity, not a schema change (Role.name, Category/
+//    Medium/Style/Theme.name, Notification.type, Payment.provider).
+//    Do NOT add a "shadow enum" next to a String field that's
+//    intentionally a String (see the Role note below for a real example
+//    of this mistake, already made and reverted once).
 //
-//   5. onDelete behavior follows one consistent rule throughout: anything
-//      that represents FINANCIAL OR HISTORICAL TRUTH (an Order, a Payment,
-//      a completed OrderItem's record of what was bought) is protected with
-//      `Restrict` or preserved via `SetNull` — the database will refuse an
-//      operation that would silently destroy that history, rather than
-//      quietly cascading it away. Anything that's just "glue" with no
-//      independent meaning (a CartItem without its Cart, an ArtworkImage
-//      without its Artwork) safely cascades.
+// 5. Composite primary keys: pure "junction" tables that only ever
+//    connect two other records with nothing of their own worth looking
+//    up individually (UserRole, RolePermission, ArtworkCategory,
+//    ArtworkStyle, ArtworkTheme, ArtworkMedium, Favorite) use a
+//    COMPOSITE PRIMARY KEY — e.g. `@@id([userId, roleId])` — instead of a
+//    separate synthetic id. That composite key is already guaranteed
+//    unique by definition, so it enforces "no duplicate pairs" for free.
+//    CartItem is the one exception (it has its own `id`), since cart
+//    line items are individually addressable (edit quantity by id, etc).
 //
-//   6. A few fields had no enum values specified in the brief, so I made a
-//      deliberate, explained choice for each — flagged with a comment right
-//      at that field, and summarized again at the end of this file.
-//   ===========================================================================
+// 6. onDelete follows one consistent rule everywhere: anything that
+//    represents FINANCIAL OR HISTORICAL TRUTH (an Order, a Payment, a
+//    completed OrderItem's record of what was bought, a Review, an
+//    AuditLog entry) is protected with `Restrict` or preserved via
+//    `SetNull` — the database refuses to silently destroy that history
+//    as a side effect of deleting something else. Anything that's just
+//    "glue" with no independent meaning (a CartItem without its Cart, an
+//    ArtworkImage without its Artwork) safely cascades. When adding a
+//    new relation, ask "does losing this row silently lose something we
+//    need to be able to prove happened later?" — if yes, Restrict/
+//    SetNull; if no, Cascade is fine.
+//
+// 7. Indexing philosophy: Postgres does NOT automatically index foreign
+//    key columns — every `fields: [xId]` relation should usually have a
+//    matching `@@index([xId])` unless it's already covered by a
+//    composite index. Beyond foreign keys, index columns that are
+//    actually filtered/sorted on in real application queries — check the
+//    controller before adding one. Where a hot query path filters or
+//    sorts on MULTIPLE columns together (e.g. Artwork's public listing
+//    always filters status + visibility and sorts by publishedAt), add
+//    ONE composite index covering that combination — it's meaningfully
+//    faster than Postgres combining several single-column indexes for
+//    the same query, not just a style preference.
+//
+// ===========================================================================
 
 // ===========================================================================
 // DOMAIN 1 — IDENTITY & ACCESS
@@ -88,14 +114,25 @@ model User {
   inventoryReservations InventoryReservation[]
   conversationsAsBuyer  Conversation[]         @relation("BuyerConversations")
   messagesSent          Message[]
+
+  @@index([status])
+  @@index([createdAt])
 }
 
+// Role.name is a String, not an enum — deliberately. Admin capability in
+// this system is "a User whose roles include the row named ADMIN" (see
+// requireAdmin.ts on the API side), and roles are exactly the kind of
+// thing that should be addable by an admin at runtime (e.g. a future
+// MODERATOR role) without a code deployment. A `RoleType` enum was added
+// here once as a "just in case" safeguard, went unused everywhere, and
+// had values (`USER`, not `BUYER`) that didn't even match the roles the
+// app actually seeds and checks against — a real, live example of the
+// "shadow enum" mistake described in point 4 above. Don't reintroduce it;
+// if role values genuinely need to become a fixed, migration-gated set
+// later, convert `Role.name` itself to an enum deliberately, not a
+// parallel field next to it.
 model Role {
   id          String   @id @default(uuid())
-  // Not an enum — seeded with BUYER / ARTIST / ADMIN initially, but a
-  // real production system usually ends up needing more roles over time
-  // (e.g. "MODERATOR"), and roles are exactly the kind of thing an admin
-  // should be able to add without needing a code deployment.
   name        String   @unique
   description String?
   createdAt   DateTime @default(now())
@@ -123,6 +160,7 @@ model UserRole {
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
+  @@index([roleId])
 }
 
 model RolePermission {
@@ -133,12 +171,21 @@ model RolePermission {
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
+  @@index([permissionId])
 }
 
+// Not currently used by the API — auth is stateless, signed JWT cookies
+// (see apps/api/src/lib/auth.ts), so nothing writes to this table today.
+// It's here, indexed and ready, for whenever the app needs DB-backed
+// sessions (server-side revocation, "log out of all devices", a visible
+// session list) — a real feature, just not built yet. tokenHash is
+// unique so a hash collision (astronomically unlikely, but this is a
+// security-relevant table) is a hard constraint violation, not a silent
+// duplicate row.
 model Session {
   id        String    @id @default(uuid())
   userId    String
-  tokenHash String // never store a raw, usable session token — only its hash
+  tokenHash String    @unique // never store a raw, usable session token — only its hash
   expiresAt DateTime
   revokedAt DateTime?
   ipAddress String?
@@ -148,6 +195,7 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([expiresAt])
 }
 
 model Address {
@@ -202,10 +250,10 @@ model ArtistProfile {
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   achievements        ArtistAchievement[]
   socialLinks         ArtistSocialLink[]
-  // Restrict, not Cascade: deleting an artist's profile should not be
-  // able to silently wipe out an entire catalog of artworks (which may
-  // already be tied to real orders). The application should require
-  // artworks to be archived or reassigned first.
+  // Restrict: deleting an artist's profile must not silently wipe an
+  // entire catalog of artworks that may already be tied to real orders.
+  // Application code should require artworks to be archived/reassigned
+  // first — the database refuses to let that happen by accident.
   artworks            Artwork[]
   orderItems          OrderItem[]
   commissionsReceived CommissionRequest[] @relation("ArtistCommissions")
@@ -222,12 +270,7 @@ model ArtistAchievement {
   organization String?
   description  String?
   year         Int?
-  // No enum values were specified for "type" in the brief (e.g. award vs
-  // exhibition vs press feature could all be valid). Left as a free-form
-  // String rather than guessing at a fixed list that might not match
-  // reality — an enum here would need a migration every time a new kind
-  // of achievement comes up.
-  type         String?
+  type         String? // free-form on purpose — see point 4 above
   createdAt    DateTime @default(now())
 
   artist ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
@@ -296,11 +339,10 @@ model Artwork {
   mediums               ArtworkMedium[]
   inventory             Inventory?
   cartItems             CartItem[]
-  // SetNull, not Restrict/Cascade: an OrderItem is a historical SNAPSHOT
-  // of a purchase (see OrderItem below) — it's specifically designed to
-  // remain fully meaningful even if the original Artwork is later
-  // deleted. The snapshot fields carry the truth; the live link is a
-  // convenience, not a requirement.
+  // SetNull: an OrderItem is a historical SNAPSHOT of a purchase (see
+  // OrderItem below) — designed to stay fully meaningful even if the
+  // Artwork it pointed at is later deleted. The snapshot fields carry
+  // the truth; this live link is a convenience, not a requirement.
   orderItems            OrderItem[]
   favorites             Favorite[]
   reviews               Review[]
@@ -309,16 +351,24 @@ model Artwork {
 
   @@index([artistId])
   @@index([status])
+  @@index([visibility])
   @@index([publishedAt])
   @@index([price])
+  // The public artwork list/detail endpoints (GET /artworks,
+  // GET /artworks/:slug) ALWAYS filter status + visibility together and
+  // sort by publishedAt for the default views — this composite index is
+  // built specifically for that exact, extremely frequent query shape.
+  // The single-column indexes above stay too, for anything that filters
+  // on just one of these fields alone.
+  @@index([status, visibility, publishedAt])
 }
 
 model ArtworkImage {
   id        String   @id @default(uuid())
   artworkId String
   // Deliberately just a URL, not the image itself — Postgres is the
-  // wrong tool for storing binary image data. This is designed to point
-  // at a real object storage/CDN service (Cloudinary, S3, etc.).
+  // wrong tool for binary image data. Points at real object storage/CDN
+  // (Cloudinary, S3, etc).
   url       String
   altText   String?
   width     Int?
@@ -330,6 +380,9 @@ model ArtworkImage {
   artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
 
   @@index([artworkId])
+  // Matches exactly how the API queries this table: "give me the one
+  // primary image for this artwork" (where: { artworkId, isPrimary: true }).
+  @@index([artworkId, isPrimary])
 }
 
 model Category {
@@ -378,6 +431,7 @@ model ArtworkCategory {
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@id([artworkId, categoryId])
+  @@index([categoryId])
 }
 
 model ArtworkStyle {
@@ -389,6 +443,7 @@ model ArtworkStyle {
   style   Style   @relation(fields: [styleId], references: [id], onDelete: Cascade)
 
   @@id([artworkId, styleId])
+  @@index([styleId])
 }
 
 model ArtworkTheme {
@@ -400,6 +455,7 @@ model ArtworkTheme {
   theme   Theme   @relation(fields: [themeId], references: [id], onDelete: Cascade)
 
   @@id([artworkId, themeId])
+  @@index([themeId])
 }
 
 model ArtworkMedium {
@@ -411,6 +467,7 @@ model ArtworkMedium {
   medium  Medium  @relation(fields: [mediumId], references: [id], onDelete: Cascade)
 
   @@id([artworkId, mediumId])
+  @@index([mediumId])
 }
 
 // ===========================================================================
@@ -423,12 +480,14 @@ model Inventory {
   quantity         Int      @default(1)
   reservedQuantity Int      @default(0)
   soldQuantity     Int      @default(0)
-  // Optimistic locking: every update increments this number. If two
-  // requests try to update the same inventory row at once, the second
-  // one can detect its `version` is now stale and retry instead of
-  // silently overwriting the first update — this is exactly the kind of
-  // guard that prevents two people buying the last copy of a unique
-  // artwork at the same instant.
+  // Optimistic locking: every update increments this. If two requests
+  // try to update the same inventory row at once, the second can detect
+  // its `version` is stale and retry instead of silently overwriting the
+  // first — this is what stops two people buying the last copy of a
+  // unique artwork at the same instant. "Available" is always COMPUTED
+  // as quantity - reservedQuantity - soldQuantity, never stored directly
+  // (see artworkControllers.ts's isAvailable()) — that avoids it ever
+  // silently drifting out of sync with reality.
   version          Int      @default(0)
   updatedAt        DateTime @updatedAt
 
@@ -461,6 +520,7 @@ model CartItem {
   artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
 
   @@unique([cartId, artworkId])
+  @@index([cartId])
 }
 
 // ===========================================================================
@@ -491,21 +551,20 @@ model Order {
   totalAmount    Decimal @db.Decimal(12, 2)
   currency       String
 
-  // Stored as JSON snapshots, not foreign keys to Address — the whole
-  // point is that if the customer edits or deletes their saved address
-  // next week, this order still shows exactly where it was actually
-  // shipped at the time. A live foreign key couldn't guarantee that.
+  // Stored as JSON snapshots, not foreign keys to Address — if the
+  // customer edits/deletes their saved address next week, this order
+  // still shows exactly where it actually shipped at the time. A live
+  // foreign key couldn't guarantee that.
   shippingAddressSnapshot Json
   billingAddressSnapshot  Json
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Restrict: a user's purchase history is financial record-keeping.
-  // The database itself refuses to let a User be deleted while they
-  // still have Orders on file, forcing that to be a deliberate
-  // (and probably soft-delete/anonymize) decision in application code,
-  // never an accident.
+  // Restrict: a user's purchase history is financial record-keeping —
+  // the database refuses to let a User be deleted while Orders exist,
+  // forcing that to be a deliberate (probably soft-delete/anonymize)
+  // application decision, never an accident.
   user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
   items        OrderItem[]
   payments     Payment[]
@@ -521,11 +580,10 @@ model Order {
 model OrderItem {
   id        String  @id @default(uuid())
   orderId   String
-  // Nullable + SetNull on delete: these two links are a convenience for
-  // "jump to the live artwork/artist page," not the source of truth.
-  // The *Snapshot fields right below are the source of truth, and they
-  // survive completely intact even if the artwork or artist is deleted
-  // later — which is the entire point of calling them "snapshots."
+  // Nullable + SetNull: these are a convenience for "jump to the live
+  // artwork/artist page," not the source of truth — the *Snapshot
+  // fields below are, and they stay fully meaningful even if the
+  // artwork or artist is deleted later.
   artworkId String?
   artistId  String?
 
@@ -542,6 +600,8 @@ model OrderItem {
   reviews Review[]
 
   @@index([orderId])
+  @@index([artistId])
+  @@index([artworkId])
 }
 
 // ===========================================================================
@@ -561,14 +621,12 @@ enum PaymentStatus {
 model Payment {
   id                String        @id @default(uuid())
   orderId           String
-  // e.g. "stripe", "paypal", "local_bank_transfer" — a plain string
-  // rather than an enum, since new payment providers are exactly the
-  // kind of thing that gets added without a full deployment cycle.
+  // e.g. "stripe", "paypal" — plain string, new payment providers are
+  // exactly the kind of thing added without a full deployment cycle.
   provider          String
-  // The payment provider's OWN id for this transaction (Stripe's
-  // PaymentIntent id, PayPal's transaction id, etc.) — this is what you
-  // reconcile against if the provider's dashboard and your database
-  // ever need to be cross-checked.
+  // The provider's OWN id for this transaction — what you reconcile
+  // against if the provider's dashboard and this database ever need to
+  // be cross-checked.
   providerPaymentId String?
   amount            Decimal       @db.Decimal(12, 2)
   currency          String
@@ -578,12 +636,12 @@ model Payment {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  // Restrict: same reasoning as Order.userId above — payment history is
-  // exactly the kind of record that should never disappear as a side
-  // effect of deleting something else.
+  // Restrict: same reasoning as Order.userId above.
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
+  @@index([orderId])
   @@index([providerPaymentId])
+  @@index([status])
 }
 
 // ===========================================================================
@@ -615,6 +673,9 @@ model InventoryReservation {
   @@index([artworkId])
   @@index([userId])
   @@index([status])
+  // Needed for whatever job/cron sweeps and expires stale reservations —
+  // that query is "find everything with expiresAt in the past".
+  @@index([expiresAt])
 }
 
 // ===========================================================================
@@ -660,6 +721,8 @@ model Shipment {
   estimatedDeliveryAt DateTime?
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([status])
 }
 
 // ===========================================================================
@@ -675,10 +738,10 @@ model Favorite {
   artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
 
   @@id([userId, artworkId])
-  // The composite primary key above already makes lookups starting from
-  // userId fast. This second index specifically supports the OTHER
-  // direction — "how many people favorited this artwork" — which the
-  // composite key alone doesn't serve efficiently.
+  // The composite primary key already makes "this user's favorites"
+  // lookups fast. This index specifically supports the OTHER direction —
+  // "how many people favorited this artwork" — which the composite key
+  // alone doesn't serve efficiently.
   @@index([artworkId])
 }
 
@@ -686,11 +749,6 @@ model Favorite {
 // DOMAIN 12 — REVIEWS
 // ===========================================================================
 
-// No status values were specified in the brief for Review, only that a
-// `status` field should exist. Given the rest of this schema's emphasis
-// on moderation (ArtworkModeration domain, verified-purchase intent via
-// orderItemId), I've assumed the same PENDING/APPROVED/REJECTED pattern
-// used elsewhere — flagged here for confirmation.
 enum ReviewStatus {
   PENDING
   APPROVED
@@ -701,13 +759,14 @@ model Review {
   id          String       @id @default(uuid())
   userId      String
   artworkId   String?
-  // Nullable: "orderItemId exists so verified-purchase reviews can be
-  // enforced later" (per the brief) implies that enforcement is a
-  // FUTURE state, not required immediately — so a review isn't forced
-  // to have one yet. Once verified-purchase-only reviews become a real
-  // rule, this can become required.
+  // Nullable: orderItemId exists so verified-purchase reviews CAN be
+  // enforced later — that enforcement is a deliberate future step, not
+  // required today (reviewControllers.ts already best-effort-links this
+  // when the reviewer has a delivered order for the artwork, without
+  // requiring it).
   orderItemId String?
-  rating      Int // constrained to 1-5 at the application layer, see note below
+  rating      Int // constrained to 1-5 at the application layer (Zod) — see the
+              // migration note below for the matching DB-level constraint
   title       String?
   comment     String?
   status      ReviewStatus @default(PENDING)
@@ -719,22 +778,28 @@ model Review {
   orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
 
   @@index([artworkId])
+  @@index([userId])
+  @@index([status])
+  // Enforces "one review per user per artwork" at the database level,
+  // not just in reviewControllers.ts's application-layer check —
+  // defense in depth, same reasoning as the rating CHECK constraint
+  // note below.
+  @@unique([userId, artworkId])
 }
 
 // IMPORTANT — action required after running `prisma migrate dev`:
 // Prisma's schema language has no native "number between X and Y" type,
 // so `rating Int` alone does NOT enforce the 1-5 range at the database
-// level — only via application-side validation (Zod, same pattern as
-// the reviews feature built earlier). To actually enforce it at the
-// database level too (recommended defense-in-depth, in case some other
-// future service writes to this table directly), open the generated
-// migration.sql file for this table after running migrate dev, and add:
+// level — only via application-side validation (Zod). To enforce it at
+// the database level too (recommended defense-in-depth, in case some
+// other future service ever writes to this table directly), open the
+// generated migration.sql for this table and add:
 //
 //   ALTER TABLE "Review" ADD CONSTRAINT "Review_rating_check"
 //     CHECK (rating >= 1 AND rating <= 5);
 //
-// Prisma does not generate this automatically — it must be added by
-// hand to the migration file before running `prisma migrate deploy`.
+// Prisma does not generate this automatically — add it by hand before
+// running `prisma migrate deploy`.
 
 // ===========================================================================
 // DOMAIN 13 — COMMISSIONS
@@ -773,14 +838,117 @@ model CommissionRequest {
 }
 
 // ===========================================================================
-// DOMAIN 17 — MESSAGING (added beyond the original 16-domain spec)
+// DOMAIN 14 — NOTIFICATIONS
+// ===========================================================================
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String // free-form on purpose — see point 4 above
+  title     String
+  message   String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([readAt])
+  // Covers the actual real query: "this user's unread notifications".
+  @@index([userId, readAt])
+}
+
+// ===========================================================================
+// DOMAIN 15 — ARTWORK MODERATION
+// ===========================================================================
+//
+// NOTE for future maintainers: despite the similar name, this table is
+// for moderating ARTWORK LISTINGS (an artist submitting a piece for
+// approval), NOT review moderation. Approving/rejecting a Review is
+// audited via AuditLog instead (see adminReviewController.ts) — don't
+// conflate the two when adding new moderation features.
+
+enum ModerationAction {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  SUSPENDED
+  RESTORED
+}
+
+model ArtworkModeration {
+  id        String           @id @default(uuid())
+  artworkId String
+  adminId   String?
+  action    ModerationAction
+  reason    String?
+  createdAt DateTime         @default(now())
+
+  artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  // Nullable + SetNull: if an admin account is ever deleted, that must
+  // not block old moderation history — just lose the specific link to
+  // that now-gone admin account.
+  admin   User?   @relation("AdminModerationActions", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([artworkId])
+  @@index([adminId])
+}
+
+// ===========================================================================
+// DOMAIN 16 — AUDIT LOG
+// ===========================================================================
+
+// Enum-typed on purpose (unlike Notification.type / Role.name above) —
+// this table exists specifically for security/compliance review, so a
+// typo'd or inconsistent action name here is a real problem, not a minor
+// inconvenience. When a new part of the app needs to write an audit
+// entry, add a new value here first rather than passing an arbitrary
+// string — see adminReviewController.ts's moderateReview() for the
+// pattern (REVIEW_APPROVED / REVIEW_REJECTED were added exactly this way
+// when review moderation needed audit coverage).
+enum AuditAction {
+  USER_ROLE_UPDATED
+  ARTIST_VERIFICATION_CHANGED
+  ORDER_STATUS_CHANGED
+  ARTWORK_MODERATED
+  SYSTEM_SETTING_CHANGED
+  REVIEW_APPROVED
+  REVIEW_REJECTED
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  // Nullable + SetNull: this table's entire purpose is durability for
+  // security/compliance review — it must outlive the very user account
+  // it's about. Deleting a user must never be able to erase the record
+  // that, say, "this account approved a $50,000 refund" three years ago.
+  userId     String?
+  action     AuditAction
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// ===========================================================================
+// DOMAIN 17 — MESSAGING
 // ===========================================================================
 //
 // Why this exists: without an in-platform way for a buyer and artist to
 // discuss a commission's details, people take the conversation to
-// WhatsApp/email instead — which means no record of what was agreed to
-// (a real problem the moment there's ever a dispute), and no visibility
-// for the platform into a negotiation that's happening because of it.
+// WhatsApp/email instead — no record of what was agreed to (a real
+// problem the moment there's a dispute), and no platform visibility into
+// a negotiation happening because of it.
 
 enum ConversationStatus {
   OPEN
@@ -791,9 +959,9 @@ enum ConversationStatus {
 model Conversation {
   id                  String             @id @default(uuid())
   // Nullable on purpose: scoped to commission negotiations for now, but
-  // not permanently locked to only that use case — the same model could
-  // later support "ask a question about this artwork before buying"
-  // too, without needing a redesign.
+  // not permanently locked to only that use case — could later support
+  // "ask a question about this artwork before buying" too, without a
+  // redesign.
   commissionRequestId String?            @unique
   buyerId             String
   artistId            String
@@ -813,9 +981,9 @@ model Conversation {
 model Message {
   id             String    @id @default(uuid())
   conversationId String
-  // Nullable + SetNull: same reasoning as AuditLog earlier in this file
-  // — the conversation history itself (what was actually agreed to)
-  // should survive even if a sender's account is later deleted.
+  // Nullable + SetNull: same reasoning as AuditLog above — the
+  // conversation history (what was actually agreed to) should survive
+  // even if a sender's account is later deleted.
   senderId       String?
   body           String
   attachmentUrl  String?
@@ -826,87 +994,5 @@ model Message {
   sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
 
   @@index([conversationId])
-}
-
-// ===========================================================================
-// DOMAIN 14 — NOTIFICATIONS
-// ===========================================================================
-
-model Notification {
-  id        String    @id @default(uuid())
-  userId    String
-  // Not an enum, deliberately: notification types tend to grow
-  // continuously as a product grows ("your order shipped," "new
-  // follower," "price drop on a favorite," ...) — a plain string here
-  // avoids a database migration every time a new notification type is
-  // added, at the cost of losing strict enum validation. A reasonable,
-  // common trade-off for this specific kind of field.
-  type      String
-  title     String
-  message   String
-  data      Json?
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([readAt])
-}
-
-// ===========================================================================
-// DOMAIN 15 — ARTWORK MODERATION
-// ===========================================================================
-
-enum ModerationAction {
-  SUBMITTED
-  APPROVED
-  REJECTED
-  SUSPENDED
-  RESTORED
-}
-
-model ArtworkModeration {
-  id        String           @id @default(uuid())
-  artworkId String
-  adminId   String?
-  action    ModerationAction
-  reason    String?
-  createdAt DateTime         @default(now())
-
-  artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
-  // Nullable + SetNull: if an admin account is ever deleted, we don't
-  // want that to be blocked by old moderation history, but we also
-  // don't want to lose the history itself — just the specific link to
-  // that now-gone admin account.
-  admin   User?   @relation("AdminModerationActions", fields: [adminId], references: [id], onDelete: SetNull)
-
-  @@index([artworkId])
-}
-
-// ===========================================================================
-// DOMAIN 16 — AUDIT LOG
-// ===========================================================================
-
-model AuditLog {
-  id         String   @id @default(uuid())
-  // Nullable + SetNull: an audit log's entire purpose is durability for
-  // security/compliance review. It must be able to outlive the very
-  // user account it's about — deleting a user's account should never be
-  // able to erase the record that, say, "this account approved a
-  // $50,000 refund" three years ago.
-  userId     String?
-  action     String
-  entityType String
-  entityId   String?
-  metadata   Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([entityType, entityId])
   @@index([createdAt])
 }

@@ -45,7 +45,7 @@ export function Navbar() {
           href="/"
           className="font-display text-lg tracking-[0.08em] text-foreground focus-visible:outline-2"
         >
-          ARTIST<span className="text-accent">_</span>PLATFORM
+          Fine<span className="text-accent">_</span>Arts
         </Link>
 
         <ul className="hidden items-center gap-9 md:flex">

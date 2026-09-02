@@ -125,6 +125,18 @@ export async function pingRedis(): Promise<boolean> {
   }
 }
 
+/**
+ * Cheap, synchronous health check — true if the client believes it has
+ * an active connection right now. Does NOT guarantee the very next
+ * command will succeed (the connection could drop between this check
+ * and that command) — that's exactly why RedisCircuitBreaker also wraps
+ * the real call in a try/catch rather than relying on this alone.
+ * Use pingRedis() instead when you need an actual, verified round-trip.
+ */
+export function isRedisAvailable(): boolean {
+  return redis.isReady;
+}
+
 /* ------------------------------------------------------------------ */
 /* Shutdown                                                             */
 /* ------------------------------------------------------------------ */

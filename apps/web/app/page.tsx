@@ -1,12 +1,11 @@
 import { Navbar } from '../components/layout/Navbar';
 import { Footer } from '../components/layout/Footer';
 import { Hero } from '../components/hero/Hero';
-import { FeaturedArtists } from '../components/artists/FeaturedArtists';
-import { FeaturedArtworks } from '../components/artworks/FeaturedArtworks';
+import { FeaturedArtists } from '../components/artist/FeaturedArtists';
+import { FeaturedArtworks } from '../components/artwork/FeaturedArtwork';
 import { CreativeCategories } from '../components/categories/CreativeCategories';
 import { ValueProposition } from '../components/sections/ValueProposition';
 import { FinalCTA } from '../components/sections/FinalCTA';
-
 /*
   Explainer: this file is intentionally just a "table of contents" for the
   homepage — it imports each section and lists them in order. All the

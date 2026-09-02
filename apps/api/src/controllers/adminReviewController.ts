@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { AuditAction } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { HttpError } from '../lib/httpError.js';
 import type { ModerateReviewInput } from '../validation/review.js';
@@ -7,6 +8,15 @@ const ACTION_TO_STATUS = {
   approve: 'APPROVED',
   reject: 'REJECTED',
 } as const;
+
+// Explicit map instead of string-templating the enum value — a
+// template literal like `REVIEW_${action.toUpperCase()}` silently
+// produced 'REVIEW_APPROVE' / 'REVIEW_REJECT', which don't match the
+// actual AuditAction enum values (REVIEW_APPROVED / REVIEW_REJECTED).
+const ACTION_TO_AUDIT_ACTION: Record<keyof typeof ACTION_TO_STATUS, AuditAction> = {
+  approve: 'REVIEW_APPROVED',
+  reject: 'REVIEW_REJECTED',
+};
 
 /*
   Explainer: GET /api/v1/admin/reviews — the moderation queue. Gated by
@@ -60,13 +70,14 @@ export async function moderateReview(req: Request, res: Response) {
   }
 
   const status = ACTION_TO_STATUS[action];
+  const auditAction = ACTION_TO_AUDIT_ACTION[action];
 
   const [updated] = await prisma.$transaction([
     prisma.review.update({ where: { id }, data: { status } }),
     prisma.auditLog.create({
       data: {
         userId: adminId,
-        action: `REVIEW_${action.toUpperCase()}`,
+        action: auditAction,
         entityType: 'Review',
         entityId: id,
         metadata: reason ? { reason } : undefined,
