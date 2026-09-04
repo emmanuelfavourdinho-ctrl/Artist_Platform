@@ -13,11 +13,11 @@ function buildFirebaseAdminApp(): App {
   });
 }
 
-export const adminAuth: Auth =
+export const adminAuth: Pick<Auth, 'verifyIdToken'> =
   config.nodeEnv === 'test'
-    ? ({
-        verifyIdToken: async () => {
+    ? {
+        verifyIdToken: async (..._args) => {
           throw new Error('Firebase authentication is unavailable in API unit tests');
         },
-      } as unknown as Auth)
+      }
     : getAuth(buildFirebaseAdminApp());
