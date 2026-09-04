@@ -19,6 +19,10 @@ export default defineConfig({
       JWT_SECRET: 'test-jwt-secret-not-for-production-use-only-12345',
       COOKIE_SECRET: 'test-cookie-secret-not-for-production-use-6789',
       REDIS_URL: 'redis://localhost:6379',
+      FIREBASE_PROJECT_ID: 'artist-platform-test',
+      FIREBASE_CLIENT_EMAIL: 'firebase-adminsdk-test@artist-platform-test.iam.gserviceaccount.com',
+      FIREBASE_PRIVATE_KEY:
+        '-----BEGIN PRIVATE KEY-----\\nTEST-ONLY-NOT-A-REAL-KEY\\n-----END PRIVATE KEY-----\\n',
     },
   },
 });
