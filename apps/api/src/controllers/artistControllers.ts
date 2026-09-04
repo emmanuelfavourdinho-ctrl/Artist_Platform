@@ -87,6 +87,7 @@ export async function getArtistBySlug(req: Request, res: Response) {
   res.json({
     status: 'success',
     data: {
+      id: artist.id,
       name: artist.displayName,
       slug: artist.slug,
       biography: artist.biography,

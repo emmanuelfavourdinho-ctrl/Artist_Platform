@@ -125,6 +125,7 @@ model User {
   inventoryReservations InventoryReservation[]
   conversationsAsBuyer  Conversation[]         @relation("BuyerConversations")
   messagesSent          Message[]
+  communityPosts        CommunityPost[]        @relation("CommunityPostAuthor")
 
   @@index([status])
   @@index([createdAt])
@@ -238,13 +239,15 @@ model ArtistProfile {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   achievements        ArtistAchievement[]
   socialLinks         ArtistSocialLink[]
   artworks            Artwork[]
   orderItems          OrderItem[]
-  commissionsReceived CommissionRequest[] @relation("ArtistCommissions")
-  conversations       Conversation[]      @relation("ArtistConversations")
+  commissionsReceived CommissionRequest[]  @relation("ArtistCommissions")
+  conversations       Conversation[]       @relation("ArtistConversations")
+  communityPosts      CommunityPost[]      @relation("ArtistCommunityPosts")
+  commissionProposals CommissionProposal[]
 
   @@index([slug])
   @@index([verificationStatus])
@@ -331,6 +334,8 @@ model Artwork {
   reviews               Review[]
   moderationHistory     ArtworkModeration[]
   inventoryReservations InventoryReservation[]
+  Conversation          Conversation[]
+  CommunityPost         CommunityPost[]
 
   @@index([artistId])
   @@index([status])
@@ -526,12 +531,13 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  items        OrderItem[]
-  payments     Payment[]
-  invoice      Invoice?
-  shipment     Shipment?
-  reservations InventoryReservation[]
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items         OrderItem[]
+  payments      Payment[]
+  invoice       Invoice?
+  shipment      Shipment?
+  reservations  InventoryReservation[]
+  conversations Conversation[]
 
   @@index([userId])
   @@index([status])
@@ -716,10 +722,10 @@ model Review {
   artwork   Artwork?   @relation(fields: [artworkId], references: [id], onDelete: SetNull)
   orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, artworkId])
   @@index([artworkId])
   @@index([userId])
   @@index([status])
-  @@unique([userId, artworkId])
 }
 
 // ===========================================================================
@@ -742,6 +748,11 @@ model CommissionRequest {
   artistId    String
   title       String
   description String
+  category    String?
+  style       String?
+  dimensions  String?
+  intendedUse String?
+  notes       String?
   budget      Decimal?         @db.Decimal(12, 2)
   currency    String?
   deadline    DateTime?
@@ -749,9 +760,11 @@ model CommissionRequest {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  buyer        User          @relation("BuyerCommissions", fields: [buyerId], references: [id], onDelete: Restrict)
-  artist       ArtistProfile @relation("ArtistCommissions", fields: [artistId], references: [id], onDelete: Restrict)
+  buyer        User                  @relation("BuyerCommissions", fields: [buyerId], references: [id], onDelete: Restrict)
+  artist       ArtistProfile         @relation("ArtistCommissions", fields: [artistId], references: [id], onDelete: Restrict)
   conversation Conversation?
+  references   CommissionReference[]
+  proposal     CommissionProposal?
 
   @@index([buyerId])
   @@index([artistId])
@@ -852,6 +865,8 @@ enum ConversationStatus {
 model Conversation {
   id                  String             @id @default(uuid())
   commissionRequestId String?            @unique
+  artworkId           String?
+  orderId             String?
   buyerId             String
   artistId            String
   status              ConversationStatus @default(OPEN)
@@ -859,12 +874,16 @@ model Conversation {
   updatedAt           DateTime           @updatedAt
 
   commissionRequest CommissionRequest? @relation(fields: [commissionRequestId], references: [id], onDelete: SetNull)
+  artwork           Artwork?           @relation(fields: [artworkId], references: [id], onDelete: SetNull)
+  order             Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
   buyer             User               @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Restrict)
   artist            ArtistProfile      @relation("ArtistConversations", fields: [artistId], references: [id], onDelete: Restrict)
   messages          Message[]
 
   @@index([buyerId])
   @@index([artistId])
+  @@index([artworkId])
+  @@index([orderId])
 }
 
 model Message {
@@ -873,6 +892,9 @@ model Message {
   senderId       String?
   body           String
   attachmentUrl  String?
+  attachmentType String?
+  attachmentName String?
+  attachmentSize Int?
   readAt         DateTime?
   createdAt      DateTime  @default(now())
 
@@ -881,4 +903,63 @@ model Message {
 
   @@index([conversationId])
   @@index([createdAt])
+}
+
+model CommunityPost {
+  id          String   @id @default(uuid())
+  authorId    String
+  artistId    String
+  artworkId   String?
+  title       String
+  body        String
+  imageUrl    String?
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author  User          @relation("CommunityPostAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  artist  ArtistProfile @relation("ArtistCommunityPosts", fields: [artistId], references: [id], onDelete: Restrict)
+  artwork Artwork?      @relation(fields: [artworkId], references: [id], onDelete: SetNull)
+
+  @@index([artistId, publishedAt])
+  @@index([publishedAt])
+}
+
+model CommissionReference {
+  id           String   @id @default(uuid())
+  commissionId String
+  url          String
+  publicId     String?
+  resourceType String   @default("image")
+  fileName     String?
+  fileType     String?
+  fileSize     Int?
+  createdAt    DateTime @default(now())
+
+  commission CommissionRequest @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+
+  @@index([commissionId])
+}
+
+model CommissionProposal {
+  id                  String    @id @default(uuid())
+  commissionId        String    @unique
+  artistId            String
+  price               Decimal   @db.Decimal(12, 2)
+  currency            String
+  estimatedCompletion DateTime?
+  revisions           Int?
+  deliveryFormat      String?
+  usageRights         String?
+  notes               String?
+  expiresAt           DateTime?
+  status              String    @default("PENDING")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  commission CommissionRequest @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+  artist     ArtistProfile     @relation(fields: [artistId], references: [id], onDelete: Restrict)
+
+  @@index([artistId])
+  @@index([status])
 }
