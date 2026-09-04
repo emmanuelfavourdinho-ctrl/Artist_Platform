@@ -29,9 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadAppUser(fbUser: FirebaseUser) {
     try {
-      // A throwaway credential-shaped object works here because
-      // syncWithBackend only needs .user.getIdToken().
-      const body = await syncWithBackend({ user: fbUser } as any);
+      const body = await syncWithBackend({ user: fbUser });
       setAppUser(body.user);
       setArtistProfile(body.artistProfile);
       setError(null);

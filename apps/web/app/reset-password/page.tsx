@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { Suspense, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -11,7 +11,7 @@ import { FormAlert } from '../../components/auth/FormAlert';
 import { Reveal } from '../../components/ui/Reveal';
 import { confirmReset, mapFirebaseError } from '../../lib/authClient';
 
-export default function ResetPasswordPage() {
+function ResetPasswordPageContent() {
   const searchParams = useSearchParams();
   // Firebase puts this in the reset-link URL automatically — nothing
   // to build ourselves, we just read it out.
@@ -103,5 +103,13 @@ export default function ResetPasswordPage() {
         )}
       </Reveal>
     </AuthLayout>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordPageContent />
+    </Suspense>
   );
 }

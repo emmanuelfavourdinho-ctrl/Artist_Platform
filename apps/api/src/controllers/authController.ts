@@ -36,7 +36,7 @@ export async function syncUser(req: Request, res: Response, next: NextFunction):
       });
     }
     const decodedToken = await adminAuth.verifyIdToken(idToken);
-    const { uid: firebaseUid, email, name } = decodedToken;
+    const { uid: firebaseUid, email, name, email_verified: emailVerified } = decodedToken;
 
     if (!email) {
       throw new HttpError(400, 'Firebase user must have a valid email address', {
@@ -73,7 +73,29 @@ export async function syncUser(req: Request, res: Response, next: NextFunction):
     if (user && !user.firebaseUid) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { firebaseUid },
+        data: {
+          firebaseUid,
+          ...(emailVerified ? { emailVerifiedAt: user.emailVerifiedAt ?? new Date() } : {}),
+          ...(emailVerified && user.status === 'PENDING_VERIFICATION' ? { status: 'ACTIVE' } : {}),
+        },
+        include: {
+          roles: { include: { role: true } },
+          artistProfile: { select: { displayName: true, biography: true, slug: true } },
+        },
+      });
+    }
+
+    if (
+      user &&
+      emailVerified &&
+      (!user.emailVerifiedAt || user.status === 'PENDING_VERIFICATION')
+    ) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+          ...(user.status === 'PENDING_VERIFICATION' ? { status: 'ACTIVE' } : {}),
+        },
         include: {
           roles: { include: { role: true } },
           artistProfile: { select: { displayName: true, biography: true, slug: true } },
@@ -83,7 +105,12 @@ export async function syncUser(req: Request, res: Response, next: NextFunction):
 
     // 3. If new user, create PostgreSQL account with selected intent role
     if (!user) {
-      const requestedRole = intent === 'ARTIST' ? 'ARTIST' : 'BUYER';
+      if (intent !== 'ARTIST' && intent !== 'BUYER') {
+        throw new HttpError(400, 'Choose a platform intention before creating an account', {
+          code: 'INTENT_REQUIRED',
+        });
+      }
+      const requestedRole = intent;
 
       user = await prisma.user.create({
         data: {
@@ -91,6 +118,7 @@ export async function syncUser(req: Request, res: Response, next: NextFunction):
           email,
           firstName,
           lastName,
+          status: emailVerified ? 'ACTIVE' : 'PENDING_VERIFICATION',
           roles: { create: [{ role: { connect: { name: 'BUYER' } } }] },
         },
         include: {
@@ -128,6 +156,7 @@ export async function syncUser(req: Request, res: Response, next: NextFunction):
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        status: user.status,
         roles,
       },
       artistProfile: summarizeArtistProfile(user.artistProfile),

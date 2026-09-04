@@ -5,6 +5,7 @@ export interface AuthResponseUser {
   email: string;
   firstName: string;
   lastName: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED' | 'PENDING_VERIFICATION';
   roles: string[];
 }
 
@@ -30,7 +31,12 @@ export interface AuthSuccessBody {
 // typed `router.push()`/`<Link href>` checking without callers needing
 // to cast anything themselves.
 export function resolveAuthDestination(body: AuthSuccessBody): Route {
+  if (body.user.status === 'SUSPENDED' || body.user.status === 'DEACTIVATED') {
+    return '/account/status' as Route;
+  }
   if (body.user.roles.includes('ADMIN')) return '/admin' as Route;
-  if (body.user.roles.includes('ARTIST')) return '/studio' as Route;
-  return '/gallery' as Route;
+  if (body.user.roles.includes('ARTIST')) {
+    return body.artistProfile.isComplete ? ('/studio' as Route) : ('/studio/onboarding' as Route);
+  }
+  return '/account' as Route;
 }

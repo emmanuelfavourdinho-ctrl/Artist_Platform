@@ -30,4 +30,10 @@ export const cloudinaryUploadSignatureSchema = z.object({
   timestamp: z.number().int().positive(),
 });
 
+export const updateArtistProfileSchema = z.object({
+  displayName: z.string().trim().min(2).max(100),
+  biography: z.string().trim().min(20).max(2000),
+  location: z.string().trim().max(120).optional(),
+});
+
 export type CreateArtworkInput = z.infer<typeof createArtworkSchema>;

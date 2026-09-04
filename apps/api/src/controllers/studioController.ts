@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '../config/db.js';
 import { config } from '../config/index.js';
 import { HttpError } from '../lib/httpError.js';
-import { createArtworkSchema } from '../schemas/studioSchemas.js';
+import { createArtworkSchema, updateArtistProfileSchema } from '../schemas/studioSchemas.js';
 
 function slugify(text: string): string {
   return (
@@ -138,6 +138,37 @@ export function getCloudinaryUploadSignature(req: Request, res: Response, next: 
       .digest('hex');
 
     res.json({ status: 'success', data: { timestamp, signature, apiKey, cloudName, folder } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateArtistProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) throw new Error('Authenticated user is required');
+    const body = updateArtistProfileSchema.parse(req.body);
+
+    const existingProfile = await prisma.artistProfile.findUnique({ where: { userId } });
+    const profile = existingProfile
+      ? await prisma.artistProfile.update({
+          where: { userId },
+          data: body,
+          select: { displayName: true, biography: true, slug: true, location: true },
+        })
+      : await prisma.artistProfile.create({
+          data: {
+            userId,
+            ...body,
+            slug: `${body.displayName
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-|-$/g, '')}-${userId.slice(0, 8)}`,
+          },
+          select: { displayName: true, biography: true, slug: true, location: true },
+        });
+
+    res.json({ success: true, data: profile });
   } catch (err) {
     next(err);
   }

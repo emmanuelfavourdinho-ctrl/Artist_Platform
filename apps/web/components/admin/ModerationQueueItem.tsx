@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../../context/AuthContext';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
 
 interface PendingReview {
   id: string;
@@ -19,6 +22,7 @@ function initials(firstName: string, lastName: string): string {
 
 export function ModerationQueueItem({ review }: { review: PendingReview }) {
   const router = useRouter();
+  const { firebaseUser } = useAuth();
   const [pending, setPending] = useState<'approve' | 'reject' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,9 +31,13 @@ export function ModerationQueueItem({ review }: { review: PendingReview }) {
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/reviews/${review.id}`, {
+      const token = await firebaseUser?.getIdToken();
+      const res = await fetch(`${API_URL}/api/v1/admin/reviews/${review.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ action }),
       });
 

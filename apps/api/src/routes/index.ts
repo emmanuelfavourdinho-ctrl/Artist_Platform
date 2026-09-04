@@ -10,6 +10,7 @@ import studioRouter from './studioRoutes.js';
 const router = Router();
 router.use('/health', healthRouter);
 router.use('/artworks', artworksRouter);
+router.use('/artworks', reviewsRouter);
 router.use('/reviews', reviewsRouter);
 router.use('/admin', adminRouter);
 router.use('/auth', authRouter);

@@ -6,11 +6,14 @@ import {
   CloudinaryImageUpload,
   UploadedCloudinaryImage,
 } from '../../components/ui/CloudinaryImageUpload';
+import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
+import { useAuth } from '../../context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
 const API_BASE_URL = API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
 
-export default function StudioPage() {
+function StudioContent() {
+  const { firebaseUser } = useAuth();
   const [artworks, setArtworks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,8 +27,12 @@ export default function StudioPage() {
 
   const loadStudio = async () => {
     try {
+      const token = await firebaseUser?.getIdToken();
       const res = await fetch(`${API_BASE_URL}/v1/studio/artworks`, {
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         credentials: 'include',
       });
       const json = await res.json();
@@ -39,16 +46,20 @@ export default function StudioPage() {
 
   useEffect(() => {
     loadStudio();
-  }, []);
+  }, [firebaseUser]);
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
+      const token = await firebaseUser?.getIdToken();
       const res = await fetch(`${API_BASE_URL}/v1/studio/artworks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         credentials: 'include',
         body: JSON.stringify({ title, description, price: Number(price), images }),
       });
@@ -198,5 +209,13 @@ export default function StudioPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function StudioPage() {
+  return (
+    <ProtectedRoute allowRoles={['ARTIST']}>
+      <StudioContent />
+    </ProtectedRoute>
   );
 }

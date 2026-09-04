@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
+import { resolveAuthDestination } from '../../lib/authRouting';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -11,7 +12,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowRoles }: ProtectedRouteProps) {
-  const { appUser, loading, error } = useAuth();
+  const { appUser, artistProfile, loading, error } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -29,11 +30,11 @@ export function ProtectedRoute({ children, allowRoles }: ProtectedRouteProps) {
       // Logged in, but wrong role — send to their own correct home
       // rather than a scary blank error page.
       router.replace(
-        appUser.roles.includes('ADMIN')
-          ? '/admin'
-          : appUser.roles.includes('ARTIST')
-            ? '/studio'
-            : '/gallery',
+        resolveAuthDestination({
+          status: 'ok',
+          user: appUser,
+          artistProfile: artistProfile ?? { exists: false, isComplete: false, slug: null },
+        }),
       );
     }
   }, [loading, appUser, allowRoles, router]);
