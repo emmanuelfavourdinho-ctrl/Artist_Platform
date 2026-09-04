@@ -1,37 +1,40 @@
 import type { NextFunction, Request, Response } from 'express';
-import { verifySessionToken } from '../lib/auth.js';
+import { adminAuth } from '../lib/firebaseAdmin.js';
 import { HttpError } from '../lib/httpError.js';
+import { prisma } from '../lib/prisma.js';
 
-export const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME ?? 'session_token';
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next(new HttpError(401, 'Login required', { code: 'AUTH_REQUIRED' }));
+    }
 
-/*
-  Explainer: this is the base authentication gate — it answers "is
-  someone logged in at all?" and attaches req.user if so. requireAdmin
-  builds on top of this rather than duplicating it, since "admin" is
-  just "logged in AND has the ADMIN role," not a separate identity
-  system.
+    const token = authHeader.split('Bearer ')[1];
+    if (!token) {
+      return next(new HttpError(401, 'Login required', { code: 'AUTH_REQUIRED' }));
+    }
+    const decodedToken = await adminAuth.verifyIdToken(token);
 
-  Same signed-cookie reasoning as before: cookie-parser only populates
-  req.signedCookies once it's verified the cookie's HMAC signature, so a
-  client-tampered cookie value never reaches this code at all.
-*/
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const raw = req.signedCookies?.[SESSION_COOKIE_NAME];
-  const token = typeof raw === 'string' ? raw : undefined;
+    const user = await prisma.user.findUnique({
+      where: { firebaseUid: decodedToken.uid },
+      include: { roles: { include: { role: true } } },
+    });
 
-  if (!token) {
-    next(new HttpError(401, 'Login required', { code: 'AUTH_REQUIRED' }));
-    return;
-  }
+    if (!user) {
+      return next(
+        new HttpError(401, 'User account not synchronized in database', { code: 'USER_NOT_FOUND' }),
+      );
+    }
 
-  const payload = verifySessionToken(token);
+    req.user = {
+      id: user.id,
+      email: user.email,
+      roles: user.roles.map((r) => r.role.name),
+    };
 
-  if (!payload) {
-    res.clearCookie(SESSION_COOKIE_NAME);
+    next();
+  } catch {
     next(new HttpError(401, 'Session is invalid or has expired', { code: 'SESSION_INVALID' }));
-    return;
   }
-
-  req.user = { id: payload.sub, email: payload.email, roles: payload.roles };
-  next();
 }

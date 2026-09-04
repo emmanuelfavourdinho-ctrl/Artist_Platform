@@ -1,47 +1,16 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { config } from '../config/index.js';
+import { Router } from 'express';
+import { syncUser } from '../controllers/authController.js';
+import { authRateLimiter } from '../middleware/authRateLimiter.js';
 
-// Cost factor 12 is a reasonable 2024+ default — high enough to resist
-// offline brute-forcing, low enough not to noticeably slow login. Revisit
-// upward as hardware gets faster; bcrypt is deliberately slow-by-design.
-const BCRYPT_COST_FACTOR = 12;
-const SESSION_TOKEN_TTL = '24h';
-
-export interface AuthTokenPayload {
-  sub: string; // User.id
-  email: string;
-  roles: string[]; // Role.name values, e.g. ['BUYER'] or ['BUYER', 'ADMIN']
-}
-
-export async function hashPassword(plain: string): Promise<string> {
-  return bcrypt.hash(plain, BCRYPT_COST_FACTOR);
-}
-
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plain, hash);
-}
-
-export function signSessionToken(payload: AuthTokenPayload): string {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: SESSION_TOKEN_TTL });
-}
+export const authRouter = Router();
 
 /**
- * Returns null for ANY verification failure — expired, malformed,
- * wrong signature, or a payload that's missing/mistyped fields. Callers
- * should treat null uniformly as "not authenticated," never inspect why.
+ * POST /auth/sync
+ * Called right after Firebase login/signup succeeds on the frontend.
+ * Verifies the Firebase ID token, finds-or-creates the matching
+ * PostgreSQL User, and returns role/account info for routing.
+ * Idempotent — safe to call on every page load.
  */
-export function verifySessionToken(token: string): AuthTokenPayload | null {
-  try {
-    const decoded = jwt.verify(token, config.jwtSecret);
-    if (typeof decoded === 'string') return null;
+authRouter.post('/sync', authRateLimiter, syncUser);
 
-    const { sub, email, roles } = decoded as Partial<AuthTokenPayload>;
-    if (typeof sub !== 'string' || typeof email !== 'string' || !Array.isArray(roles)) {
-      return null;
-    }
-    return { sub, email, roles };
-  } catch {
-    return null;
-  }
-}
+export default authRouter;

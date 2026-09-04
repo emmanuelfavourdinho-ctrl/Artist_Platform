@@ -9,8 +9,8 @@ import { AuthField } from '../../components/auth/AuthField';
 import { AuthSubmitButton } from '../../components/auth/AuthSubmitButton';
 import { FormAlert } from '../../components/auth/FormAlert';
 import { Reveal } from '../../components/ui/Reveal';
-import { fieldErrorsFrom, type ApiErrorBody } from '../../lib/apiTypes';
-import { resolveAuthDestination, type AuthSuccessBody } from '../../lib/authRouting';
+import { resolveAuthDestination } from '../../lib/authRouting';
+import { registerWithEmail, loginWithGoogle, mapFirebaseError } from '../../lib/authClient';
 
 type Intent = 'artist' | 'buyer';
 
@@ -20,10 +20,6 @@ export default function RegisterPage() {
   const rawIntent = searchParams.get('intent');
   const intent: Intent | null = rawIntent === 'artist' || rawIntent === 'buyer' ? rawIntent : null;
 
-  // No valid intent in the URL — send them through the choice first
-  // rather than silently defaulting to one (defaulting is how the old
-  // flow ended up with every signup as BUYER with no way to signal
-  // otherwise).
   useEffect(() => {
     if (!intent) router.replace('/welcome');
   }, [intent, router]);
@@ -33,46 +29,45 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   if (!intent) return null;
+
+  const backendIntent = intent === 'artist' ? 'ARTIST' : 'BUYER';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setFormError(null);
-    setFieldErrors({});
-
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          email,
-          password,
-          intent: intent.toUpperCase(),
-        }),
+      const body = await registerWithEmail({
+        email,
+        password,
+        firstName,
+        lastName,
+        intent: backendIntent,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        const err = data as ApiErrorBody;
-        setFormError(err.message ?? 'Something went wrong. Try again.');
-        setFieldErrors(fieldErrorsFrom(err.details));
-        return;
-      }
-
-      const body = data as AuthSuccessBody;
-      router.refresh();
       router.push(resolveAuthDestination(body));
-    } catch {
-      setFormError('Could not reach the server. Check your connection and try again.');
+      router.refresh();
+    } catch (err) {
+      setFormError(mapFirebaseError(err));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleGoogle() {
+    setGoogleSubmitting(true);
+    setFormError(null);
+    try {
+      const body = await loginWithGoogle(backendIntent);
+      router.push(resolveAuthDestination(body));
+      router.refresh();
+    } catch (err) {
+      setFormError(mapFirebaseError(err));
+    } finally {
+      setGoogleSubmitting(false);
     }
   }
 
@@ -100,10 +95,25 @@ export default function RegisterPage() {
         </h1>
       </Reveal>
 
-      <Reveal delay={120}>
-        <form onSubmit={handleSubmit} noValidate className="mt-10 flex flex-col gap-5">
-          {formError && <FormAlert message={formError} />}
+      <Reveal delay={100}>
+        <button
+          type="button"
+          onClick={handleGoogle}
+          disabled={googleSubmitting}
+          className="mt-8 flex w-full items-center justify-center gap-2 rounded-lg border border-foreground/10 px-4 py-3 text-sm font-medium text-foreground transition hover:border-accent disabled:opacity-60"
+        >
+          {googleSubmitting ? 'Connecting…' : 'Continue with Google'}
+        </button>
+        <div className="my-6 flex items-center gap-4">
+          <span className="h-px flex-1 bg-foreground/10" />
+          <span className="text-xs uppercase tracking-widest text-muted">or</span>
+          <span className="h-px flex-1 bg-foreground/10" />
+        </div>
+      </Reveal>
 
+      <Reveal delay={120}>
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+          {formError && <FormAlert message={formError} />}
           <div className="grid grid-cols-2 gap-4">
             <AuthField
               id="firstName"
@@ -113,8 +123,7 @@ export default function RegisterPage() {
               autoComplete="given-name"
               required
               value={firstName}
-              onChange={(event) => setFirstName(event.target.value)}
-              error={fieldErrors.firstName}
+              onChange={(e) => setFirstName(e.target.value)}
             />
             <AuthField
               id="lastName"
@@ -124,11 +133,9 @@ export default function RegisterPage() {
               autoComplete="family-name"
               required
               value={lastName}
-              onChange={(event) => setLastName(event.target.value)}
-              error={fieldErrors.lastName}
+              onChange={(e) => setLastName(e.target.value)}
             />
           </div>
-
           <AuthField
             id="email"
             label="Email"
@@ -137,10 +144,8 @@ export default function RegisterPage() {
             autoComplete="email"
             required
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            error={fieldErrors.email}
+            onChange={(e) => setEmail(e.target.value)}
           />
-
           <div>
             <AuthField
               id="password"
@@ -151,12 +156,10 @@ export default function RegisterPage() {
               required
               minLength={8}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              error={fieldErrors.password}
+              onChange={(e) => setPassword(e.target.value)}
             />
             <p className="mt-1.5 text-xs text-muted">At least 8 characters.</p>
           </div>
-
           <div className="mt-2">
             <AuthSubmitButton
               submitting={submitting}

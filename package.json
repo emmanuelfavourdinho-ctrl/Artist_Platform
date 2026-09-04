@@ -39,6 +39,7 @@
     "typescript": "5.5.4"
   },
   "dependencies": {
+    "firebase": "^12.18.0",
     "next-cloudinary": "^6.18.8",
     "redis": "^6.2.1"
   }

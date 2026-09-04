@@ -14,10 +14,8 @@ describe('HomePage', () => {
   it('renders the featured artists section with each artist name', () => {
     render(<HomePage />);
 
-    expect(
-      screen.getByRole('heading', { name: /Meet the creators/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Amara Osei')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Meet the creators/i })).toBeInTheDocument();
+    expect(screen.getByText('Angel-Faith')).toBeInTheDocument();
   });
 
   it('renders the final call to action', () => {

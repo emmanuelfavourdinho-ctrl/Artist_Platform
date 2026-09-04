@@ -2,8 +2,13 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import Image from 'next/image';
+import {
+  CloudinaryImageUpload,
+  UploadedCloudinaryImage,
+} from '../../components/ui/CloudinaryImageUpload';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
+const API_BASE_URL = API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
 
 export default function StudioPage() {
   const [artworks, setArtworks] = useState<any[]>([]);
@@ -15,12 +20,13 @@ export default function StudioPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [images, setImages] = useState<UploadedCloudinaryImage[]>([]);
 
   const loadStudio = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/studio/artworks`, {
+      const res = await fetch(`${API_BASE_URL}/v1/studio/artworks`, {
         headers: { Accept: 'application/json' },
+        credentials: 'include',
       });
       const json = await res.json();
       if (json.success) setArtworks(json.data.artworks);
@@ -40,17 +46,18 @@ export default function StudioPage() {
     setSubmitting(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/v1/studio/artworks`, {
+      const res = await fetch(`${API_BASE_URL}/v1/studio/artworks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, price: Number(price), imageUrl }),
+        credentials: 'include',
+        body: JSON.stringify({ title, description, price: Number(price), images }),
       });
 
       if (res.ok) {
         setTitle('');
         setDescription('');
         setPrice('');
-        setImageUrl('');
+        setImages([]);
         setIsModalOpen(false);
         await loadStudio();
       }
@@ -145,19 +152,7 @@ export default function StudioPage() {
                   className="w-full bg-[rgb(var(--background))] border border-[rgb(var(--border)/0.2)] p-3 rounded text-sm text-[rgb(var(--foreground))]"
                 />
               </div>
-              <div>
-                <label className="block text-xs uppercase text-[rgb(var(--muted))] mb-1 font-mono">
-                  Image URL
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full bg-[rgb(var(--background))] border border-[rgb(var(--border)/0.2)] p-3 rounded text-sm text-[rgb(var(--foreground))]"
-                />
-              </div>
+              <CloudinaryImageUpload value={images} onChange={setImages} />
               <div>
                 <label className="block text-xs uppercase text-[rgb(var(--muted))] mb-1 font-mono">
                   Price (USD)
@@ -192,7 +187,7 @@ export default function StudioPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || images.length === 0}
                   className="px-6 py-2 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] font-medium text-sm rounded transition-opacity disabled:opacity-50"
                 >
                   {submitting ? 'Publishing...' : 'Publish Work'}

@@ -4,6 +4,9 @@ import { z } from 'zod';
 // business being in free-text input — cheap hygiene against corrupted
 // storage/rendering, independent of HTML/XSS escaping (which still must
 // happen at render time, not here).
+
+// entire job is matching control characters, so the rule's warning does
+// not apply here the way it would in an accidental match.
 const stripControlChars = (value: string) => value.replace(/[\u0000-\u001f\u007f]/g, '');
 
 /*

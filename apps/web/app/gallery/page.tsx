@@ -31,7 +31,7 @@ export default async function GalleryPage({ searchParams }: GalleryPageProps) {
 
   const query: ListArtworksQuery = {
     page: firstValue(rawParams.page) ?? '1',
-    sort: firstValue(rawParams.sort) ?? 'popular',
+    sort: (firstValue(rawParams.sort) as ListArtworksQuery['sort']) ?? 'featured',
     minPrice: firstValue(rawParams.minPrice),
     maxPrice: firstValue(rawParams.maxPrice),
     category: firstValue(rawParams.category),
@@ -65,7 +65,7 @@ export default async function GalleryPage({ searchParams }: GalleryPageProps) {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== '') {
-        params.set(key, value);
+        params.set(key, String(value));
       }
     }
     params.set('page', String(page));

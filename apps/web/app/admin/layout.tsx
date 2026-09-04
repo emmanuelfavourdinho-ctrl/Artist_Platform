@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 
-const ADMIN_NAV = [{ href: '/admin', label: 'Moderation' }];
+const ADMIN_NAV = [{ href: '/admin' as const, label: 'Moderation' }];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);

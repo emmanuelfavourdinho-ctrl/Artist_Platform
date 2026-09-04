@@ -18,6 +18,11 @@ dotenv.config();
   SEPARATE secret from JWT_SECRET — signing admin cookies and signing
   admin JWTs are different trust boundaries, and reusing one secret for
   both means a leak of either purpose compromises both.
+
+  FIREBASE_* follow the same "loud crash, not silent fallback"
+  philosophy — Firebase Admin literally cannot verify tokens without
+  these, so a missing value should fail at startup, not at the first
+  real login attempt in production.
 */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -28,6 +33,13 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().optional(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
   COOKIE_SECRET: z.string().min(32, 'COOKIE_SECRET must be at least 32 characters long'),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+
+  FIREBASE_PROJECT_ID: z.string().min(1, 'FIREBASE_PROJECT_ID is required'),
+  FIREBASE_CLIENT_EMAIL: z.string().email('FIREBASE_CLIENT_EMAIL must be a valid email'),
+  FIREBASE_PRIVATE_KEY: z.string().min(1, 'FIREBASE_PRIVATE_KEY is required'),
 
   // Set TRUST_PROXY explicitly to override the production-only default
   // below — e.g. TRUST_PROXY=false if you're running behind something
@@ -59,6 +71,16 @@ export const config = {
     : ['http://localhost:3000'],
   jwtSecret: env.JWT_SECRET,
   cookieSecret: env.COOKIE_SECRET,
+  cloudinary: {
+    cloudName: env.CLOUDINARY_CLOUD_NAME,
+    apiKey: env.CLOUDINARY_API_KEY,
+    apiSecret: env.CLOUDINARY_API_SECRET,
+  },
+  firebase: {
+    projectId: env.FIREBASE_PROJECT_ID,
+    clientEmail: env.FIREBASE_CLIENT_EMAIL,
+    privateKey: env.FIREBASE_PRIVATE_KEY,
+  },
   trustProxy:
     env.TRUST_PROXY !== undefined ? env.TRUST_PROXY === 'true' : env.NODE_ENV === 'production',
   rateLimit: {
