@@ -9,7 +9,6 @@ export default function GalleryLoading() {
 
       <div className="mt-12 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
         {Array.from({ length: 12 }).map((_, index) => (
-          // eslint-disable-next-line react/no-array-index-key -- static skeleton count, index is a stable key here
           <div key={index} className={`aspect-[4/5] rounded-md ${shimmer}`} />
         ))}
       </div>

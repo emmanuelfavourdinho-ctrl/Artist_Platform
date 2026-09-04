@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 // entire job is matching control characters, so the rule's warning does
 // not apply here the way it would in an accidental match.
+// eslint-disable-next-line no-control-regex
 const stripControlChars = (value: string) => value.replace(/[\u0000-\u001f\u007f]/g, '');
 
 /*

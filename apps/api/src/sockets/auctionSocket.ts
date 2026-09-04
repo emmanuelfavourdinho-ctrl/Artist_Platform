@@ -18,7 +18,7 @@ export function registerAuctionSocket(io: Server): void {
           userId,
           createdAt: new Date(),
         });
-      } catch (err) {
+      } catch {
         socket.emit('error', { message: 'Failed to place bid' });
       }
     });

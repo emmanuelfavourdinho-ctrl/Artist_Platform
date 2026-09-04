@@ -7,8 +7,8 @@ export async function createPaymentIntent(
   next: NextFunction,
 ): Promise<Response | void> {
   try {
-    const userId = (req as any).user?.id;
-    const { amount, currency = 'usd' } = req.body;
+    const _userId = (req as any).user?.id;
+    const { amount: _amount, currency: _currency = 'usd' } = req.body;
 
     // TODO: Connect your Stripe/payment gateway logic here
     return res.json({

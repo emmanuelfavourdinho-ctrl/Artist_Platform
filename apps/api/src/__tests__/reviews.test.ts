@@ -10,27 +10,31 @@ vi.mock('../lib/prisma.js', () => ({
   },
 }));
 
+vi.mock('../lib/firebaseAdmin.js', () => ({
+  adminAuth: { verifyIdToken: vi.fn() },
+}));
+
 import { app } from '../app.js';
-import { hashPassword } from '../lib/auth.js';
+import { adminAuth } from '../lib/firebaseAdmin.js';
 import { prisma } from '../lib/prisma.js';
 
-const REAL_PASSWORD = 'a-genuinely-strong-password-123';
+const BUYER_TOKEN = 'firebase-buyer-test-token';
 
-async function loggedInBuyerAgent() {
+function loggedInBuyerAgent() {
+  vi.mocked(adminAuth.verifyIdToken).mockResolvedValue({
+    uid: 'firebase-buyer-1',
+    email: 'buyer@example.com',
+  } as never);
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     id: 'buyer-1',
+    firebaseUid: 'firebase-buyer-1',
     email: 'buyer@example.com',
-    passwordHash: await hashPassword(REAL_PASSWORD),
     firstName: 'Jane',
     lastName: 'Doe',
     roles: [{ role: { name: 'BUYER' } }],
   } as never);
 
-  const agent = request.agent(app);
-  await agent
-    .post('/api/v1/auth/login')
-    .send({ email: 'buyer@example.com', password: REAL_PASSWORD });
-  return agent;
+  return request(app);
 }
 
 describe('POST /api/v1/artworks/:artworkId/reviews', () => {
@@ -48,59 +52,71 @@ describe('POST /api/v1/artworks/:artworkId/reviews', () => {
   });
 
   it('rejects a rating outside the 1-5 range', async () => {
-    const agent = await loggedInBuyerAgent();
+    const agent = loggedInBuyerAgent();
     vi.mocked(prisma.artwork.findUnique).mockResolvedValue({ id: 'artwork-01' } as never);
 
-    const response = await agent.post('/api/v1/artworks/artwork-01/reviews').send({
-      rating: 9,
-      comment: 'This is a perfectly reasonable length comment.',
-    });
+    const response = await agent
+      .post('/api/v1/artworks/artwork-01/reviews')
+      .set('Authorization', `Bearer ${BUYER_TOKEN}`)
+      .send({
+        rating: 9,
+        comment: 'This is a perfectly reasonable length comment.',
+      });
 
     expect(response.status).toBe(400);
     expect(prisma.review.create).not.toHaveBeenCalled();
   });
 
   it('rejects a comment that is too short (guards against low-effort spam)', async () => {
-    const agent = await loggedInBuyerAgent();
+    const agent = loggedInBuyerAgent();
     vi.mocked(prisma.artwork.findUnique).mockResolvedValue({ id: 'artwork-01' } as never);
 
-    const response = await agent.post('/api/v1/artworks/artwork-01/reviews').send({
-      rating: 5,
-      comment: 'short',
-    });
+    const response = await agent
+      .post('/api/v1/artworks/artwork-01/reviews')
+      .set('Authorization', `Bearer ${BUYER_TOKEN}`)
+      .send({
+        rating: 5,
+        comment: 'short',
+      });
 
     expect(response.status).toBe(400);
   });
 
   it('returns 404 when the artwork does not exist', async () => {
-    const agent = await loggedInBuyerAgent();
+    const agent = loggedInBuyerAgent();
     vi.mocked(prisma.artwork.findUnique).mockResolvedValue(null);
 
-    const response = await agent.post('/api/v1/artworks/does-not-exist/reviews').send({
-      rating: 5,
-      comment: 'This is a perfectly reasonable length comment.',
-    });
+    const response = await agent
+      .post('/api/v1/artworks/does-not-exist/reviews')
+      .set('Authorization', `Bearer ${BUYER_TOKEN}`)
+      .send({
+        rating: 5,
+        comment: 'This is a perfectly reasonable length comment.',
+      });
 
     expect(response.status).toBe(404);
     expect(prisma.review.create).not.toHaveBeenCalled();
   });
 
   it('rejects a second review from the same user for the same artwork', async () => {
-    const agent = await loggedInBuyerAgent();
+    const agent = loggedInBuyerAgent();
     vi.mocked(prisma.artwork.findUnique).mockResolvedValue({ id: 'artwork-01' } as never);
     vi.mocked(prisma.review.findFirst).mockResolvedValue({ id: 'existing-review' } as never);
 
-    const response = await agent.post('/api/v1/artworks/artwork-01/reviews').send({
-      rating: 5,
-      comment: 'This is a perfectly reasonable length comment.',
-    });
+    const response = await agent
+      .post('/api/v1/artworks/artwork-01/reviews')
+      .set('Authorization', `Bearer ${BUYER_TOKEN}`)
+      .send({
+        rating: 5,
+        comment: 'This is a perfectly reasonable length comment.',
+      });
 
     expect(response.status).toBe(409);
     expect(prisma.review.create).not.toHaveBeenCalled();
   });
 
   it('creates a review that always starts PENDING, even if the client tries to sneak in a different status', async () => {
-    const agent = await loggedInBuyerAgent();
+    const agent = loggedInBuyerAgent();
     vi.mocked(prisma.artwork.findUnique).mockResolvedValue({ id: 'artwork-01' } as never);
     vi.mocked(prisma.review.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.orderItem.findFirst).mockResolvedValue(null);
@@ -110,11 +126,14 @@ describe('POST /api/v1/artworks/:artworkId/reviews', () => {
       orderItemId: null,
     } as never);
 
-    const response = await agent.post('/api/v1/artworks/artwork-01/reviews').send({
-      rating: 5,
-      status: 'APPROVED', // deliberately trying to sneak this in
-      comment: 'This is a perfectly reasonable length comment.',
-    });
+    const response = await agent
+      .post('/api/v1/artworks/artwork-01/reviews')
+      .set('Authorization', `Bearer ${BUYER_TOKEN}`)
+      .send({
+        rating: 5,
+        status: 'APPROVED', // deliberately trying to sneak this in
+        comment: 'This is a perfectly reasonable length comment.',
+      });
 
     expect(response.status).toBe(201);
     expect(response.body.data.status).toBe('PENDING');
@@ -127,7 +146,7 @@ describe('POST /api/v1/artworks/:artworkId/reviews', () => {
   });
 
   it('labels a review as verified when the reviewer has a delivered order for that artwork', async () => {
-    const agent = await loggedInBuyerAgent();
+    const agent = loggedInBuyerAgent();
     vi.mocked(prisma.artwork.findUnique).mockResolvedValue({ id: 'artwork-01' } as never);
     vi.mocked(prisma.review.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.orderItem.findFirst).mockResolvedValue({ id: 'order-item-1' } as never);
@@ -137,10 +156,13 @@ describe('POST /api/v1/artworks/:artworkId/reviews', () => {
       orderItemId: 'order-item-1',
     } as never);
 
-    const response = await agent.post('/api/v1/artworks/artwork-01/reviews').send({
-      rating: 5,
-      comment: 'This is a perfectly reasonable length comment.',
-    });
+    const response = await agent
+      .post('/api/v1/artworks/artwork-01/reviews')
+      .set('Authorization', `Bearer ${BUYER_TOKEN}`)
+      .send({
+        rating: 5,
+        comment: 'This is a perfectly reasonable length comment.',
+      });
 
     expect(response.status).toBe(201);
     expect(response.body.data.verifiedPurchase).toBe(true);

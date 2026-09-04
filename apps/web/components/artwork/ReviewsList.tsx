@@ -20,7 +20,6 @@ export function ReviewsList({ reviews }: { reviews: ArtworkReview[] }) {
                 className="flex gap-0.5 text-accent"
               >
                 {Array.from({ length: 5 }, (_, index) => (
-                  // eslint-disable-next-line react/no-array-index-key -- static 5-star display
                   <span key={index} aria-hidden="true">
                     {index < review.rating ? '★' : '☆'}
                   </span>

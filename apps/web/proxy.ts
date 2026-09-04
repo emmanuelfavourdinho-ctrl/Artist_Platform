@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
 // Next.js 16 requires the exported function to be named 'proxy' or 'default'
-export function proxy(request: NextRequest) {
+export function proxy() {
   // Your routing / guard logic here
   return NextResponse.next();
 }
