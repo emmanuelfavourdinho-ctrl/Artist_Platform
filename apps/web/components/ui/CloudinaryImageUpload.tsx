@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
 const API_BASE_URL = API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
@@ -22,6 +23,7 @@ interface CloudinaryImageUploadProps {
   value: UploadedCloudinaryImage[];
   onChange: (images: UploadedCloudinaryImage[]) => void;
   maxImages?: number;
+  signaturePath?: string;
 }
 
 interface SignatureResponse {
@@ -41,7 +43,9 @@ export function CloudinaryImageUpload({
   value,
   onChange,
   maxImages = 10,
+  signaturePath = '/v1/studio/uploads/cloudinary-signature',
 }: CloudinaryImageUploadProps) {
+  const { firebaseUser } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -65,12 +69,11 @@ export function CloudinaryImageUpload({
       if (dimensions.width > 20000 || dimensions.height > 20000) {
         throw new Error('Images must be no larger than 20,000 pixels on either side.');
       }
-      const signatureResponse = await fetch(
-        `${API_BASE_URL}/v1/studio/uploads/cloudinary-signature`,
-        {
-          credentials: 'include',
-        },
-      );
+      const signatureResponse = await fetch(`${API_BASE_URL}${signaturePath}`, {
+        headers: firebaseUser
+          ? { Authorization: `Bearer ${await firebaseUser.getIdToken()}` }
+          : undefined,
+      });
       if (!signatureResponse.ok) throw new Error('Unable to prepare the image upload.');
       const signature = (await signatureResponse.json()) as SignatureResponse;
       const formData = new FormData();

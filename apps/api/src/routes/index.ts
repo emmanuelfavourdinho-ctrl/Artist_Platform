@@ -10,11 +10,12 @@ import commissionRouter from './commissionRoutes.js';
 import communityRouter from './communityRoutes.js';
 import messageRouter from './messageRoutes.js';
 import mediaRouter from './mediaRoutes.js';
+import { usersRouter } from './userRoutes.js';
+import { favoriteRouter } from './favoriteRoutes.js';
 
 const router = Router();
 router.use('/health', healthRouter);
 router.use('/artworks', artworksRouter);
-router.use('/artworks', reviewsRouter);
 router.use('/reviews', reviewsRouter);
 router.use('/admin', adminRouter);
 router.use('/auth', authRouter);
@@ -24,5 +25,7 @@ router.use('/commissions', commissionRouter);
 router.use('/community', communityRouter);
 router.use('/messages', messageRouter);
 router.use('/media', mediaRouter);
+router.use('/users', usersRouter);
+router.use('/favorites', favoriteRouter);
 
 export { router };

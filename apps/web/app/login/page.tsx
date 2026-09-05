@@ -1,55 +1,32 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { AuthField } from '../../components/auth/AuthField';
 import { AuthSubmitButton } from '../../components/auth/AuthSubmitButton';
+import { AuthDivider } from '../../components/auth/AuthDivider';
 import { FormAlert } from '../../components/auth/FormAlert';
+import { GoogleAuthButton } from '../../components/auth/GoogleAuthButton';
+import { PasswordField } from '../../components/auth/PasswordField';
 import { Reveal } from '../../components/ui/Reveal';
-import { resolveAuthDestination } from '../../lib/authRouting';
-import { loginWithEmail, loginWithGoogle, mapFirebaseError } from '../../lib/authClient';
+import { loginWithEmail, loginWithGoogle } from '../../lib/authClient';
+import { useAuthForm } from '../../lib/useAuthForm';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [googleSubmitting, setGoogleSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const { error, emailPending, googlePending, anyPending, runEmail, runGoogle } = useAuthForm();
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitting(true);
-    setFormError(null);
-    setFieldErrors({});
-
-    try {
-      const body = await loginWithEmail(email, password);
-      router.push(resolveAuthDestination(body));
-      router.refresh();
-    } catch (err) {
-      setFormError(mapFirebaseError(err));
-    } finally {
-      setSubmitting(false);
-    }
+    void runEmail(() => loginWithEmail(email, password));
   }
 
-  async function handleGoogle() {
-    setGoogleSubmitting(true);
-    setFormError(null);
-    try {
-      const body = await loginWithGoogle();
-      router.push(resolveAuthDestination(body));
-      router.refresh();
-    } catch (err) {
-      setFormError(mapFirebaseError(err));
-    } finally {
-      setGoogleSubmitting(false);
-    }
+  function handleGoogle() {
+    void runGoogle(() => loginWithGoogle());
   }
 
   return (
@@ -67,63 +44,60 @@ export default function LoginPage() {
       </Reveal>
 
       <Reveal delay={120}>
-        <button
-          type="button"
-          onClick={handleGoogle}
-          disabled={googleSubmitting}
-          className="mt-8 flex w-full items-center justify-center gap-2 rounded-lg border border-foreground/10 px-4 py-3 text-sm font-medium text-foreground transition hover:border-accent disabled:opacity-60"
-        >
-          {googleSubmitting ? 'Connecting…' : 'Continue with Google'}
-        </button>
-        <div className="my-6 flex items-center gap-4">
-          <span className="h-px flex-1 bg-foreground/10" />
-          <span className="text-xs uppercase tracking-widest text-muted">or</span>
-          <span className="h-px flex-1 bg-foreground/10" />
+        <div role="alert" aria-live="assertive" className="mt-10">
+          {error && <FormAlert message={error} />}
         </div>
-        <form onSubmit={handleSubmit} noValidate className="mt-10 flex flex-col gap-5">
-          {formError && <FormAlert message={formError} />}
 
-          <AuthField
-            id="email"
-            label="Email"
-            type="email"
-            name="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            error={fieldErrors.email}
-          />
-
-          <div className="-mt-2 text-right text-sm">
-            <Link
-              href="/forgot-password"
-              className="font-medium text-accent underline underline-offset-2"
-            >
-              Forgot your password?
-            </Link>
-          </div>
-
-          <AuthField
-            id="password"
-            label="Password"
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            error={fieldErrors.password}
-          />
-
-          <div className="mt-2">
-            <AuthSubmitButton
-              submitting={submitting}
-              label="Log in"
-              submittingLabel="Logging in…"
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+          <fieldset disabled={googlePending} className="contents border-0 p-0 m-0">
+            <AuthField
+              id="email"
+              label="Email"
+              type="email"
+              name="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
             />
-          </div>
+
+            <div>
+              <PasswordField
+                id="password"
+                label="Password"
+                name="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              {/* Industry-standard placement: directly under the password
+                  field, not between email and password — this is where
+                  Google, GitHub, and most SaaS logins put it, since the
+                  person's attention is already on the password at the
+                  exact moment they'd realize they've forgotten it. */}
+              <div className="mt-1.5 text-right text-sm">
+                <Link
+                  href="/forgot-password"
+                  className="font-medium text-accent underline underline-offset-2"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-2">
+              <AuthSubmitButton
+                submitting={emailPending}
+                label="Log in"
+                submittingLabel="Logging in…"
+              />
+            </div>
+          </fieldset>
         </form>
+
+        <AuthDivider />
+        <GoogleAuthButton onClick={handleGoogle} loading={googlePending} disabled={anyPending} />
       </Reveal>
 
       <Reveal delay={200}>

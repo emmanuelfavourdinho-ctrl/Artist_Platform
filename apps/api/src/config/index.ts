@@ -19,10 +19,16 @@ dotenv.config();
   admin JWTs are different trust boundaries, and reusing one secret for
   both means a leak of either purpose compromises both.
 
-  FIREBASE_* follow the same "loud crash, not silent fallback"
-  philosophy — Firebase Admin literally cannot verify tokens without
-  these, so a missing value should fail at startup, not at the first
-  real login attempt in production.
+  FIREBASE_SERVICE_ACCOUNT_BASE64 follows the same "loud crash, not
+  silent fallback" philosophy — Firebase Admin literally cannot verify
+  tokens without it, so a missing value should fail at startup, not at
+  the first real login attempt in production. It's base64-encoded
+  (the whole downloaded service account JSON, encoded as one string)
+  rather than split into PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY fields —
+  a raw multi-line PEM private key inside a single .env line is
+  extremely easy for Windows editors/terminals to corrupt (mismatched
+  quotes, mangled \n escapes, wrong file encoding). Base64 has no
+  characters those tools ever touch.
 */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -37,9 +43,7 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
 
-  FIREBASE_PROJECT_ID: z.string().min(1, 'FIREBASE_PROJECT_ID is required'),
-  FIREBASE_CLIENT_EMAIL: z.string().email('FIREBASE_CLIENT_EMAIL must be a valid email'),
-  FIREBASE_PRIVATE_KEY: z.string().min(1, 'FIREBASE_PRIVATE_KEY is required'),
+  FIREBASE_SERVICE_ACCOUNT_BASE64: z.string().min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required'),
 
   // Set TRUST_PROXY explicitly to override the production-only default
   // below — e.g. TRUST_PROXY=false if you're running behind something
@@ -77,9 +81,7 @@ export const config = {
     apiSecret: env.CLOUDINARY_API_SECRET,
   },
   firebase: {
-    projectId: env.FIREBASE_PROJECT_ID,
-    clientEmail: env.FIREBASE_CLIENT_EMAIL,
-    privateKey: env.FIREBASE_PRIVATE_KEY,
+    serviceAccountBase64: env.FIREBASE_SERVICE_ACCOUNT_BASE64,
   },
   trustProxy:
     env.TRUST_PROXY !== undefined ? env.TRUST_PROXY === 'true' : env.NODE_ENV === 'production',

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 import { AuthLayout } from '../../components/auth/AuthLayout';
-import { AuthField } from '../../components/auth/AuthField';
+import { PasswordField } from '../../components/auth/PasswordField';
 import { AuthSubmitButton } from '../../components/auth/AuthSubmitButton';
 import { FormAlert } from '../../components/auth/FormAlert';
 import { Reveal } from '../../components/ui/Reveal';
@@ -13,8 +13,6 @@ import { confirmReset, mapFirebaseError } from '../../lib/authClient';
 
 function ResetPasswordPageContent() {
   const searchParams = useSearchParams();
-  // Firebase puts this in the reset-link URL automatically — nothing
-  // to build ourselves, we just read it out.
   const oobCode = searchParams.get('oobCode');
 
   const [password, setPassword] = useState('');
@@ -70,10 +68,9 @@ function ResetPasswordPageContent() {
         ) : (
           <form onSubmit={handleSubmit} noValidate className="mt-10 flex flex-col gap-5">
             {formError && <FormAlert message={formError} />}
-            <AuthField
+            <PasswordField
               id="password"
               label="New password"
-              type="password"
               name="password"
               autoComplete="new-password"
               required
@@ -81,10 +78,9 @@ function ResetPasswordPageContent() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <AuthField
+            <PasswordField
               id="confirmPassword"
               label="Confirm new password"
-              type="password"
               name="confirmPassword"
               autoComplete="new-password"
               required

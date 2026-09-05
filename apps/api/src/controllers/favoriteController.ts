@@ -1,19 +1,72 @@
 import type { Request, Response, NextFunction } from 'express';
-import { prisma } from '../config/db.js';
+import { prisma } from '../lib/prisma.js';
+
+interface InventorySnapshot {
+  quantity: number;
+  reservedQuantity: number;
+  soldQuantity: number;
+}
+
+// Same computation as artworkControllers.ts's isAvailable() — kept
+// identical on purpose, so "available" never means two different things
+// depending on which endpoint returned it.
+function isAvailable(inventory: InventorySnapshot | null): boolean {
+  if (!inventory) return false;
+  return inventory.quantity - inventory.reservedQuantity - inventory.soldQuantity > 0;
+}
 
 export async function getFavorites(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    // Safe to assert: requireAuth runs before this handler on every
+    // route in favoriteRoutes.ts and guarantees req.user is set, or
+    // the request never reaches here at all.
+    const userId = req.user!.id;
 
     const favorites = await prisma.favorite.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      include: {
-        artwork: true,
+      select: {
+        artwork: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            price: true,
+            currency: true,
+            images: {
+              where: { isPrimary: true },
+              take: 1,
+              select: { url: true, altText: true, width: true, height: true },
+            },
+            artist: {
+              select: { displayName: true, slug: true, verificationStatus: true },
+            },
+            inventory: {
+              select: { quantity: true, reservedQuantity: true, soldQuantity: true },
+            },
+          },
+        },
       },
     });
 
-    const artworks = favorites.map((f) => f.artwork);
+    // Shaped identically to the public artwork list endpoint's
+    // ArtworkSummary — the frontend can reuse the exact same type and
+    // card component for both "browse the gallery" and "your
+    // favorites" instead of inventing a second, slightly different shape.
+    const artworks = favorites.map(({ artwork }) => ({
+      id: artwork.id,
+      slug: artwork.slug,
+      title: artwork.title,
+      price: artwork.price,
+      currency: artwork.currency,
+      image: artwork.images[0] ?? null,
+      artist: {
+        name: artwork.artist.displayName,
+        slug: artwork.artist.slug,
+        verified: artwork.artist.verificationStatus === 'VERIFIED',
+      },
+      available: isAvailable(artwork.inventory),
+    }));
 
     res.json({
       success: true,
@@ -28,13 +81,14 @@ export async function toggleFavorite(
   req: Request,
   res: Response,
   next: NextFunction,
-): Promise<any> {
+): Promise<void> {
   try {
-    const userId = (req as any).user.id;
-    const { artworkId } = req.body;
+    const userId = req.user!.id;
+    const { artworkId } = req.body as { artworkId?: string };
 
     if (!artworkId) {
-      return res.status(400).json({ success: false, error: 'artworkId is required' });
+      res.status(400).json({ success: false, error: 'artworkId is required' });
+      return;
     }
 
     const existing = await prisma.favorite.findUnique({
@@ -45,15 +99,13 @@ export async function toggleFavorite(
       await prisma.favorite.delete({
         where: { userId_artworkId: { userId, artworkId } },
       });
-      return res.json({ success: true, isFavorited: false });
+      res.json({ success: true, isFavorited: false });
+      return;
     }
 
-    await prisma.favorite.create({
-      data: { userId, artworkId },
-    });
-
-    return res.json({ success: true, isFavorited: true });
+    await prisma.favorite.create({ data: { userId, artworkId } });
+    res.json({ success: true, isFavorited: true });
   } catch (err) {
-    return next(err);
+    next(err);
   }
 }

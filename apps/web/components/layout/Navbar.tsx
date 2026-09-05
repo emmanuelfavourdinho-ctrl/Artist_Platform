@@ -6,15 +6,11 @@ import { useState } from 'react';
 
 import { useScrolled } from '../../hooks/useScrolled';
 
-// Discover and Marketplace both point at /gallery for now — that's the
-// only real browsing page built so far. Artists and Community have no
-// page yet, so they point home rather than a route that doesn't exist
-// (Next's typed routes would fail the build on a fabricated path).
 const NAV_LINKS: { label: string; href: Route }[] = [
   { label: 'Discover', href: '/gallery' },
   { label: 'Artists', href: '/' },
   { label: 'Marketplace', href: '/gallery' },
-  { label: 'Community', href: '/' },
+  { label: 'Community', href: '/community' as Route },
 ];
 
 /*

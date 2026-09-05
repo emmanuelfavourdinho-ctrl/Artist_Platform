@@ -4,7 +4,6 @@ import {
   signInWithPopup,
   sendPasswordResetEmail,
   confirmPasswordReset,
-  sendEmailVerification,
   updateProfile,
   signOut as firebaseSignOut,
   type UserCredential,
@@ -15,7 +14,7 @@ import type { AuthSuccessBody } from './authRouting';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export async function syncWithBackend(
-  credential: Pick<UserCredential, 'user'>,
+  credential: UserCredential,
   extra?: { intent?: 'ARTIST' | 'BUYER'; firstName?: string; lastName?: string },
 ): Promise<AuthSuccessBody> {
   const idToken = await credential.user.getIdToken();
@@ -24,12 +23,7 @@ export async function syncWithBackend(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
     body: JSON.stringify(extra ?? {}),
   });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { code?: string };
-    const error = new Error(body.code?.toLowerCase() ?? 'backend_sync_failed');
-    (error as Error & { code?: string }).code = body.code?.toLowerCase();
-    throw error;
-  }
+  if (!res.ok) throw new Error('backend_sync_failed');
   return res.json();
 }
 
@@ -38,8 +32,7 @@ export async function registerWithEmail(params: {
   password: string;
   firstName: string;
   lastName: string;
-  intent: 'ARTIST' | 'BUYER';
-}): Promise<AuthSuccessBody> {
+}): Promise<UserCredential> {
   const credential = await createUserWithEmailAndPassword(
     firebaseAuth,
     params.email,
@@ -48,29 +41,19 @@ export async function registerWithEmail(params: {
   await updateProfile(credential.user, {
     displayName: `${params.firstName} ${params.lastName}`.trim(),
   });
-  await sendEmailVerification(credential.user);
-  return syncWithBackend(credential, {
-    intent: params.intent,
-    firstName: params.firstName,
-    lastName: params.lastName,
-  });
+  return credential;
 }
 
-export async function loginWithEmail(email: string, password: string): Promise<AuthSuccessBody> {
-  const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
-  return syncWithBackend(credential);
+export async function loginWithEmail(email: string, password: string): Promise<UserCredential> {
+  return signInWithEmailAndPassword(firebaseAuth, email, password);
 }
 
-export async function loginWithGoogle(intent?: 'ARTIST' | 'BUYER'): Promise<AuthSuccessBody> {
-  const credential = await signInWithPopup(firebaseAuth, googleProvider);
-  return syncWithBackend(credential, intent ? { intent } : undefined);
+export async function loginWithGoogle(): Promise<UserCredential> {
+  return signInWithPopup(firebaseAuth, googleProvider);
 }
 
 export async function sendResetEmail(email: string): Promise<void> {
-  await sendPasswordResetEmail(firebaseAuth, email, {
-    url: `${window.location.origin}/reset-password`,
-    handleCodeInApp: true,
-  });
+  await sendPasswordResetEmail(firebaseAuth, email);
 }
 
 export async function confirmReset(oobCode: string, newPassword: string): Promise<void> {
@@ -99,9 +82,8 @@ export function mapFirebaseError(error: unknown): string {
     case 'auth/too-many-requests':
       return 'Too many attempts. Please wait a moment and try again.';
     case 'backend_sync_failed':
+    case 'not_authenticated':
       return 'Your account could not be loaded. Please refresh and try again.';
-    case 'intent_required':
-      return 'Choose whether you want to buy or sell artwork before creating an account.';
     default:
       return 'Something went wrong. Please try again.';
   }

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import type { ArtworkDetail } from '../../lib/artworksApi';
+import { ArtworkActions } from './ArtworkActions';
 
 const priceFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -54,32 +55,14 @@ export function ArtworkInfoPanel({ artwork }: { artwork: ArtworkDetail }) {
         )}
       </div>
 
-      {/*
-        Add to Cart / Favorite have no backend yet (cart/favorites were
-        explicitly cut from this demo pass). Rather than fake a working
-        button, these are disabled with an honest label — real UI
-        structure, no fake success state, per the "don't fake
-        transactions" rule.
-      */}
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-        <button
-          type="button"
-          disabled
-          title={artwork.available ? 'Cart coming soon' : 'This piece has sold'}
-          className="flex-1 cursor-not-allowed rounded-full bg-foreground/15 px-7 py-3.5 text-sm font-medium text-foreground/50"
-        >
-          {artwork.available ? 'Add to Cart' : 'Sold'}
-        </button>
-        <button
-          type="button"
-          disabled
-          title="Favorites coming soon"
-          className="cursor-not-allowed rounded-full border border-foreground/15 px-7 py-3.5 text-sm font-medium text-foreground/40"
-        >
-          Favorite
-        </button>
-      </div>
-
+      <ArtworkActions
+        artworkId={artwork.id}
+        title={artwork.title}
+        price={artwork.price}
+        currency={artwork.currency}
+        available={artwork.available}
+        imageUrl={artwork.images[0]?.url ?? null}
+      />
       {artwork.description && (
         <div className="mt-10 border-t border-foreground/10 pt-8">
           <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">

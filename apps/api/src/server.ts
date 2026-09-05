@@ -1,5 +1,4 @@
 import type { Server } from 'node:http';
-import { app } from './app.js';
 import { config } from './config/index.js';
 import { connectRedis, disconnectRedis, pingRedis } from './config/redis.js';
 
@@ -57,6 +56,52 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
 async function startServer(): Promise<void> {
   try {
     await withTimeout(connectRedis(), STARTUP_TIMEOUT_MS, 'Redis connection');
+
+    /*
+      Explainer: this dynamic import() is the actual fix, and WHERE it
+      sits matters enormously.
+
+      Before: `import { app } from './app.js';` sat at the very top of
+      this file, as a normal "static" import. In JavaScript, ALL static
+      imports in a file are resolved and fully executed BEFORE any of
+      that file's own code runs — including before the very first line
+      of startServer() ever gets a chance to call connectRedis().
+
+      './app.js' pulls in './routes/index.js', which pulls in
+      'authRoutes.js' and the review routes, which each pull in
+      'authRateLimiter.js' / 'reviewRateLimiter.js'. Both of THOSE files
+      build their rate limiter the instant they're loaded:
+
+        export const authRateLimiter = rateLimit({
+          ...
+          store: new RedisStore({ ... }),
+        });
+
+      Building that RedisStore immediately tries to talk to Redis (to
+      load a small Lua script it needs). So the old order was:
+
+        1. Import app.js (transitively loads authRateLimiter.js,
+           which immediately tries to use Redis — but Redis hasn't
+           been told to connect yet at this point!)
+        2. NOW run connectRedis()
+        3. Start listening for requests
+
+      Step 1 was racing step 2 and losing, every single time — that's
+      exactly the "ClientClosedError: The client is closed" warning
+      you saw at startup.
+
+      After: by moving the import of app.js INTO an async import()
+      call, right here, AFTER connectRedis() has already been awaited,
+      we guarantee the entire chain (app -> routes -> rate limiters)
+      only loads once Redis is already connected and ready. Same code,
+      same files, just started in the correct order:
+
+        1. connectRedis() — wait for this to fully finish
+        2. NOW import app.js (rate limiters build successfully, Redis
+           is already there waiting for them)
+        3. Start listening for requests
+    */
+    const { app } = await import('./app.js');
 
     server = app.listen(PORT);
 

@@ -1,8 +1,18 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
+import { firebaseAuth } from './firebaseClient';
+import type { ArtworkSummary } from '../types/artwork';
 
-export async function fetchUserFavorites(): Promise<any[]> {
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+async function authHeader(): Promise<HeadersInit> {
+  const user = firebaseAuth.currentUser;
+  if (!user) throw new Error('not_authenticated');
+  const token = await user.getIdToken();
+  return { Authorization: `Bearer ${token}` };
+}
+
+export async function fetchUserFavorites(): Promise<ArtworkSummary[]> {
   const res = await fetch(`${API_URL}/api/v1/favorites`, {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...(await authHeader()) },
     cache: 'no-store',
   });
 
@@ -14,7 +24,7 @@ export async function fetchUserFavorites(): Promise<any[]> {
 export async function toggleFavoriteApi(artworkId: string): Promise<boolean> {
   const res = await fetch(`${API_URL}/api/v1/favorites/toggle`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
     body: JSON.stringify({ artworkId }),
   });
 

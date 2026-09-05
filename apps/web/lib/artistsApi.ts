@@ -26,6 +26,7 @@ export interface ArtistReview {
 }
 
 export interface ArtistProfileData {
+  id: string;
   name: string;
   slug: string;
   biography: string | null;

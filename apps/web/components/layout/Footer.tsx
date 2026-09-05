@@ -6,6 +6,28 @@ interface FooterLink {
   href: Route;
 }
 
+const INFO_LINKS = {
+  Buying: [
+    ['How It Works', '/how-it-works'],
+    ['Payments', '/payments'],
+    ['Shipping & Delivery', '/shipping-delivery'],
+    ['Returns / Refunds', '/returns-refunds'],
+    ['Buyer Protection', '/buyer-protection'],
+  ],
+  Selling: [
+    ['Sell Your Art', '/sell-your-art'],
+    ['Artist Guidelines', '/artist-guidelines'],
+    ['Artist Verification', '/artist-verification'],
+    ['Commissions', '/commissions'],
+    ['Payouts', '/payouts'],
+  ],
+  Help: [
+    ['FAQ', '/faq'],
+    ['Contact', '/contact'],
+    ['Report an Issue', '/report-issue'],
+  ],
+} as const;
+
 const COLUMNS: { heading: string; links: FooterLink[] }[] = [
   {
     heading: 'Platform',
@@ -76,6 +98,25 @@ export function Footer() {
                       className="text-sm text-foreground/80 transition-colors hover:text-foreground"
                     >
                       {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {Object.entries(INFO_LINKS).map(([heading, links]) => (
+            <div key={heading}>
+              <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-muted">
+                {heading}
+              </p>
+              <ul className="mt-4 flex flex-col gap-3">
+                {links.map(([label, href]) => (
+                  <li key={label}>
+                    <Link
+                      href={href as Route}
+                      className="text-sm text-foreground/80 transition-colors hover:text-foreground"
+                    >
+                      {label}
                     </Link>
                   </li>
                 ))}
