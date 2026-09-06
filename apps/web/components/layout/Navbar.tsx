@@ -5,6 +5,8 @@ import type { Route } from 'next';
 import { useState } from 'react';
 
 import { useScrolled } from '../../hooks/useScrolled';
+import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
 
 const NAV_LINKS: { label: string; href: Route }[] = [
   { label: 'Discover', href: '/gallery' },
@@ -24,6 +26,8 @@ const NAV_LINKS: { label: string; href: Route }[] = [
 export function Navbar() {
   const scrolled = useScrolled(40);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { cart } = useCart();
+  const { appUser } = useAuth();
 
   return (
     <header
@@ -65,29 +69,68 @@ export function Navbar() {
           >
             <SearchIcon />
           </button>
+
           <Link
-            href="/login"
-            className="text-[13px] font-medium uppercase tracking-[0.12em] text-foreground/80 transition-colors duration-200 hover:text-foreground"
+            href="/cart"
+            aria-label={`Cart, ${cart.length} item${cart.length === 1 ? '' : 's'}`}
+            className="relative text-foreground/80 transition-colors duration-200 hover:text-foreground"
           >
-            Log in
+            <CartIcon />
+            {cart.length > 0 && (
+              <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground">
+                {cart.length}
+              </span>
+            )}
           </Link>
-          <Link
-            href="/register"
-            className="rounded-full border border-foreground/30 px-5 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-foreground transition-colors duration-200 hover:border-accent hover:text-accent"
-          >
-            Join Artist
-          </Link>
+
+          {appUser ? (
+            <Link
+              href="/account"
+              className="text-[13px] font-medium uppercase tracking-[0.12em] text-foreground/80 transition-colors duration-200 hover:text-foreground"
+            >
+              My Account
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="text-[13px] font-medium uppercase tracking-[0.12em] text-foreground/80 transition-colors duration-200 hover:text-foreground"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/register"
+                className="rounded-full border border-foreground/30 px-5 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-foreground transition-colors duration-200 hover:border-accent hover:text-accent"
+              >
+                Join Artist
+              </Link>
+            </>
+          )}
         </div>
 
-        <button
-          type="button"
-          className="text-[13px] font-medium uppercase tracking-[0.12em] text-foreground md:hidden"
-          aria-expanded={menuOpen}
-          aria-controls="mobile-menu"
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? 'Close' : 'Menu'}
-        </button>
+        <div className="flex items-center gap-4 md:hidden">
+          <Link
+            href="/cart"
+            aria-label={`Cart, ${cart.length} item${cart.length === 1 ? '' : 's'}`}
+            className="relative text-foreground/80"
+          >
+            <CartIcon />
+            {cart.length > 0 && (
+              <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground">
+                {cart.length}
+              </span>
+            )}
+          </Link>
+          <button
+            type="button"
+            className="text-[13px] font-medium uppercase tracking-[0.12em] text-foreground"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? 'Close' : 'Menu'}
+          </button>
+        </div>
       </nav>
 
       {menuOpen && (
@@ -109,20 +152,32 @@ export function Navbar() {
             ))}
           </ul>
           <div className="mt-6 flex flex-col gap-3 border-t border-foreground/10 pt-6">
-            <Link
-              href="/login"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm uppercase tracking-[0.12em] text-foreground/80"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/register"
-              onClick={() => setMenuOpen(false)}
-              className="rounded-full bg-accent px-5 py-3 text-center text-sm font-medium uppercase tracking-[0.12em] text-accent-foreground"
-            >
-              Join Artist
-            </Link>
+            {appUser ? (
+              <Link
+                href="/account"
+                onClick={() => setMenuOpen(false)}
+                className="text-sm uppercase tracking-[0.12em] text-foreground/80"
+              >
+                My Account
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  onClick={() => setMenuOpen(false)}
+                  className="text-sm uppercase tracking-[0.12em] text-foreground/80"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/register"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-full bg-accent px-5 py-3 text-center text-sm font-medium uppercase tracking-[0.12em] text-accent-foreground"
+                >
+                  Join Artist
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -135,6 +190,22 @@ function SearchIcon() {
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
       <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
       <path d="M16 16L12.5 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <path
+        d="M2 2h1.5l1.6 9.6a1.5 1.5 0 0 0 1.48 1.25h6.24a1.5 1.5 0 0 0 1.48-1.25L15.5 5H4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="7" cy="16" r="1.1" fill="currentColor" />
+      <circle cx="13" cy="16" r="1.1" fill="currentColor" />
     </svg>
   );
 }

@@ -12,11 +12,13 @@ import messageRouter from './messageRoutes.js';
 import mediaRouter from './mediaRoutes.js';
 import { usersRouter } from './userRoutes.js';
 import { favoriteRouter } from './favoriteRoutes.js';
+import { checkoutRouter } from './checkoutRoutes.js';
+import orderRouter from './orderRoutes.js';
 
 const router = Router();
 router.use('/health', healthRouter);
 router.use('/artworks', artworksRouter);
-router.use('/reviews', reviewsRouter);
+router.use('/artworks', reviewsRouter);
 router.use('/admin', adminRouter);
 router.use('/auth', authRouter);
 router.use('/artists', artistsRouter);
@@ -27,5 +29,7 @@ router.use('/messages', messageRouter);
 router.use('/media', mediaRouter);
 router.use('/users', usersRouter);
 router.use('/favorites', favoriteRouter);
+router.use('/checkout', checkoutRouter);
+router.use('/orders', orderRouter);
 
 export { router };

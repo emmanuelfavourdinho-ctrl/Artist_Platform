@@ -57,6 +57,11 @@ const envSchema = z.object({
 
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   JSON_BODY_LIMIT: z.string().default('1mb'),
+
+  STRIPE_SECRET_KEY: z.string().min(1, 'STRIPE_SECRET_KEY is required'),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1, 'STRIPE_WEBHOOK_SECRET is required'),
+  FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+  PLATFORM_COMMISSION_RATE: z.coerce.number().min(0).max(1).default(0.15),
 });
 
 const env = envSchema.parse(process.env);
@@ -89,4 +94,9 @@ export const config = {
     max: env.RATE_LIMIT_MAX,
   },
   jsonBodyLimit: env.JSON_BODY_LIMIT,
+
+  stripeSecretKey: env.STRIPE_SECRET_KEY,
+  stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
+  frontendUrl: env.FRONTEND_URL,
+  platformCommissionRate: env.PLATFORM_COMMISSION_RATE,
 };

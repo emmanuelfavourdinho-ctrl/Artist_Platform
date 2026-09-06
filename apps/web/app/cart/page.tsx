@@ -3,59 +3,42 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import type { Route } from 'next';
+import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
+import { useAuth } from '@/context/AuthContext';
+import { createCheckoutSession } from '@/lib/checkoutApi';
 
 export default function CartPage() {
-  const { cart, removeFromCart, totalPrice, clearCart } = useCart();
+  const router = useRouter();
+  const { cart, removeFromCart, totalPrice } = useCart();
+  const { appUser, loading: authLoading } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderComplete, setOrderComplete] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const handleCheckout = async () => {
+    setCheckoutError(null);
+
+    // Cart stays guest-friendly (per how this was scoped) — login is
+    // only required at this exact step, not to view the cart itself.
+    if (!appUser) {
+      router.push('/login');
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      const artworkIds = cart.map((i) => i.id);
-      const res = await fetch(`${API_URL}/api/v1/orders/create-payment-intent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artworkIds }),
-      });
-
-      const json = await res.json();
-      if (json.success) {
-        setOrderComplete(json.data.orderNumber);
-        clearCart();
-      }
+      const items = cart.map((item) => ({ artworkId: item.id, quantity: 1 }));
+      const checkoutUrl = await createCheckoutSession(items);
+      // Full page navigation, not router.push — this goes to Stripe's
+      // own domain, not an internal route.
+      window.location.href = checkoutUrl;
     } catch (err) {
-      console.error('Checkout failed:', err);
-    } finally {
+      setCheckoutError(
+        err instanceof Error ? err.message : 'Could not start checkout. Please try again.',
+      );
       setIsProcessing(false);
     }
   };
-
-  if (orderComplete) {
-    return (
-      <div className="min-h-screen bg-[rgb(var(--background))] text-[rgb(var(--foreground))] px-[var(--container-gutter)] py-24 text-center">
-        <span className="text-xs uppercase tracking-[0.2em] text-[rgb(var(--accent))] font-medium">
-          Order Confirmed
-        </span>
-        <h1 className="font-['Fraunces'] text-4xl md:text-5xl font-normal mt-2">
-          Thank you for your purchase
-        </h1>
-        <p className="text-[rgb(var(--muted))] mt-4 font-mono text-sm">
-          Order Reference: {orderComplete}
-        </p>
-        <Link
-          href={'/orders' as Route}
-          className="inline-block mt-8 px-6 py-3 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] text-sm font-medium rounded-[var(--radius-sm)]"
-        >
-          View Order History
-        </Link>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[rgb(var(--background))] text-[rgb(var(--foreground))] px-[var(--container-gutter)] py-12">
@@ -82,7 +65,6 @@ export default function CartPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          {/* Cart Item List */}
           <div className="lg:col-span-2 space-y-4">
             {cart.map((item) => (
               <div
@@ -108,7 +90,6 @@ export default function CartPage() {
             ))}
           </div>
 
-          {/* Checkout Summary */}
           <div className="bg-[rgb(var(--surface))] p-6 rounded-[var(--radius-lg)] border border-[rgb(var(--border)/0.08)] h-fit space-y-6">
             <h2 className="font-['Fraunces'] text-xl border-b border-[rgb(var(--border)/0.1)] pb-4">
               Summary
@@ -125,13 +106,25 @@ export default function CartPage() {
               <span>Total</span>
               <span>${totalPrice.toLocaleString()}</span>
             </div>
+
+            {checkoutError && (
+              <p role="alert" className="text-sm text-red-500">
+                {checkoutError}
+              </p>
+            )}
+
             <button
               onClick={handleCheckout}
-              disabled={isProcessing}
+              disabled={isProcessing || authLoading}
               className="w-full py-3 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] font-medium text-sm rounded transition-opacity disabled:opacity-50"
             >
-              {isProcessing ? 'Processing Order...' : 'Proceed to Checkout'}
+              {isProcessing ? 'Redirecting to secure checkout…' : 'Proceed to Checkout'}
             </button>
+            {!appUser && !authLoading && (
+              <p className="text-xs text-[rgb(var(--muted))] text-center">
+                You&apos;ll be asked to log in before payment.
+              </p>
+            )}
           </div>
         </div>
       )}

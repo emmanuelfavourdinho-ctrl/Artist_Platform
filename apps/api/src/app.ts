@@ -10,6 +10,7 @@ import { config } from './config/index.js';
 import { router } from './routes/index.js';
 import { notFoundHandler } from './middleware/notFoundHandler.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { handleStripeWebhook } from './controllers/stripeWebhookController.js';
 
 // Extend Express Request type using core module augmentation
 declare module 'express-serve-static-core' {
@@ -71,6 +72,16 @@ app.use(
 /* ------------------------------------------------------------------ */
 /* Body Parsing & Cookies                                             */
 /* ------------------------------------------------------------------ */
+app.use(json({ limit: config.jsonBodyLimit }));
+
+/* ------------------------------------------------------------------ */
+/* Stripe Webhook — MUST be registered before the JSON body parser.   */
+/* Stripe's signature verification needs the exact raw request bytes; */
+/* express.json() below would otherwise consume and re-serialize the  */
+/* body before this route ever saw it, breaking signature checks.     */
+/* ------------------------------------------------------------------ */
+app.post('/api/v1/webhooks/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
 app.use(json({ limit: config.jsonBodyLimit }));
 app.use(hpp());
 

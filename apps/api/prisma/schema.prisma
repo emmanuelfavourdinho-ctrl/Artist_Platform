@@ -556,6 +556,8 @@ model OrderItem {
   quantity           Int
   currency           String
   subtotal           Decimal @db.Decimal(12, 2)
+  commissionRate     Decimal @db.Decimal(5, 4)
+  commissionAmount   Decimal @db.Decimal(12, 2)
 
   order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   artwork Artwork?       @relation(fields: [artworkId], references: [id], onDelete: SetNull)
@@ -566,7 +568,6 @@ model OrderItem {
   @@index([artistId])
   @@index([artworkId])
 }
-
 // ===========================================================================
 // DOMAIN 7 — PAYMENT
 // ===========================================================================
@@ -601,6 +602,19 @@ model Payment {
   @@index([status])
 }
 
+// Idempotency ledger for Stripe webhooks. Stripe may deliver the same
+// event more than once — before doing any real work, we try to insert
+// the event's own id here. If that insert fails (unique constraint),
+// we've already processed this exact event, so we just tell Stripe
+// "OK" and stop, instead of creating a duplicate order.
+model WebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+
+  @@index([type])
+}
+
 // ===========================================================================
 // DOMAIN 8 — INVENTORY RESERVATION
 // ===========================================================================
@@ -613,15 +627,16 @@ enum ReservationStatus {
 }
 
 model InventoryReservation {
-  id         String            @id @default(uuid())
-  artworkId  String
-  userId     String
-  orderId    String?
-  quantity   Int
-  status     ReservationStatus @default(ACTIVE)
-  expiresAt  DateTime
-  createdAt  DateTime          @default(now())
-  releasedAt DateTime?
+  id                String            @id @default(uuid())
+  artworkId         String
+  userId            String
+  orderId           String?
+  checkoutSessionId String?
+  quantity          Int
+  status            ReservationStatus @default(ACTIVE)
+  expiresAt         DateTime
+  createdAt         DateTime          @default(now())
+  releasedAt        DateTime?
 
   artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Restrict)
   user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -631,6 +646,7 @@ model InventoryReservation {
   @@index([userId])
   @@index([status])
   @@index([expiresAt])
+  @@index([checkoutSessionId])
 }
 
 // ===========================================================================

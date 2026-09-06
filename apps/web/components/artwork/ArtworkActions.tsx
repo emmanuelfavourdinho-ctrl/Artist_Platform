@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { fetchUserFavorites, toggleFavoriteApi } from '../../lib/favoritesApi';
@@ -44,6 +45,7 @@ export function ArtworkActions({
   const [favorited, setFavorited] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState(false);
 
   const inCart = cart.some((item) => item.id === artworkId);
 
@@ -70,6 +72,7 @@ export function ArtworkActions({
   function handleAddToCart() {
     if (!available || inCart) return;
     addToCart({ id: artworkId, title, price, currency, imageUrl: imageUrl ?? '' });
+    setJustAdded(true);
   }
 
   async function handleToggleFavorite() {
@@ -93,36 +96,50 @@ export function ArtworkActions({
   }
 
   return (
-    <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-      <button
-        type="button"
-        onClick={handleAddToCart}
-        disabled={!available || inCart}
-        className={`flex-1 rounded-full px-7 py-3.5 text-sm font-medium transition ${
-          !available || inCart
-            ? 'cursor-not-allowed bg-foreground/15 text-foreground/50'
-            : 'bg-accent text-background hover:opacity-90'
-        }`}
-      >
-        {!available ? 'Sold' : inCart ? 'In Cart' : 'Add to Cart'}
-      </button>
+    <div className="mt-8 flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <button
+          type="button"
+          onClick={handleAddToCart}
+          disabled={!available || inCart}
+          className={`flex-1 rounded-full px-7 py-3.5 text-sm font-medium transition ${
+            !available || inCart
+              ? 'cursor-not-allowed bg-foreground/15 text-foreground/50'
+              : 'bg-accent text-background hover:opacity-90'
+          }`}
+        >
+          {!available ? 'Sold' : inCart ? 'In Cart' : 'Add to Cart'}
+        </button>
 
-      <button
-        type="button"
-        onClick={() => void handleToggleFavorite()}
-        disabled={favoriteBusy || authLoading}
-        aria-pressed={favorited}
-        className={`flex items-center justify-center gap-2 rounded-full border px-7 py-3.5 text-sm font-medium transition ${
-          favorited
-            ? 'border-accent text-accent'
-            : 'border-foreground/15 text-foreground/70 hover:border-accent hover:text-accent'
-        } disabled:cursor-not-allowed disabled:opacity-60`}
-      >
-        <HeartIcon filled={favorited} />
-        {favorited ? 'Favorited' : 'Favorite'}
-      </button>
+        <button
+          type="button"
+          onClick={() => void handleToggleFavorite()}
+          disabled={favoriteBusy || authLoading}
+          aria-pressed={favorited}
+          className={`flex items-center justify-center gap-2 rounded-full border px-7 py-3.5 text-sm font-medium transition ${
+            favorited
+              ? 'border-accent text-accent'
+              : 'border-foreground/15 text-foreground/70 hover:border-accent hover:text-accent'
+          } disabled:cursor-not-allowed disabled:opacity-60`}
+        >
+          <HeartIcon filled={favorited} />
+          {favorited ? 'Favorited' : 'Favorite'}
+        </button>
+      </div>
 
-      {favoriteError && <p className="text-xs text-red-500 sm:self-center">{favoriteError}</p>}
+      {/* Guides the buyer to the next step immediately after adding —
+          without this, "Add to Cart" was a dead end with no visible
+          path forward except knowing to find a cart icon themselves. */}
+      {inCart && (
+        <p role="status" aria-live="polite" className="text-sm text-foreground/70">
+          {justAdded ? 'Added to your cart. ' : ''}
+          <Link href="/cart" className="font-medium text-accent underline underline-offset-2">
+            View cart &amp; checkout →
+          </Link>
+        </p>
+      )}
+
+      {favoriteError && <p className="text-xs text-red-500">{favoriteError}</p>}
     </div>
   );
 }
