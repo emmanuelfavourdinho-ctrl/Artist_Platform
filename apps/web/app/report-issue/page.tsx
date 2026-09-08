@@ -13,7 +13,7 @@ export default function Page() {
           body: (
             <>
               Share the route, approximate time, and relevant order or commission reference. Never
-              send passwords, Firebase secrets, or private credentials.
+              send passwords or private credentials.
             </>
           ),
         },

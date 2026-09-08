@@ -2,8 +2,12 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 
-const ADMIN_NAV = [{ href: '/admin' as const, label: 'Moderation' }];
+const ADMIN_NAV = [
+  { href: '/admin' as const, label: 'Moderation' },
+  { href: '/admin/messages' as const, label: 'Messages' },
+];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -15,7 +19,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           for its own mobile menu button. */}
       <div className="fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-border/10 bg-surface px-gutter py-4 sm:hidden">
         <div>
-          <p className="font-display text-base text-foreground">Artist_Platform</p>
+          <p className="font-display text-base text-foreground">FineArts</p>
           <p className="text-[10px] uppercase tracking-[0.2em] text-muted">Admin</p>
         </div>
         <button
@@ -38,7 +42,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             {ADMIN_NAV.map((item) => (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href as Route}
                 onClick={() => setDrawerOpen(false)}
                 className="rounded-md px-3 py-3 text-lg font-display text-foreground/90 transition-colors hover:bg-surface-raised hover:text-foreground"
               >
@@ -59,14 +63,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       {/* Desktop sidebar — unchanged from before, just now paired with
           a real mobile equivalent instead of vanishing below sm. */}
       <aside className="hidden w-64 shrink-0 border-r border-border/10 bg-surface px-6 py-8 sm:block">
-        <p className="font-display text-lg text-foreground">Artist_Platform</p>
+        <p className="font-display text-lg text-foreground">FineArts</p>
         <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted">Admin</p>
 
         <nav className="mt-10 flex flex-col gap-1">
           {ADMIN_NAV.map((item) => (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.href as Route}
               className="rounded-md px-3 py-2 text-sm text-foreground/80 transition-colors hover:bg-surface-raised hover:text-foreground"
             >
               {item.label}

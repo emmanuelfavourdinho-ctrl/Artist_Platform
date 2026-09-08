@@ -54,11 +54,36 @@ const COLUMNS: { heading: string; links: FooterLink[] }[] = [
   },
 ];
 
+function FooterColumn({ heading, links }: { heading: string; links: FooterLink[] }) {
+  return (
+    <div>
+      <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-muted">{heading}</p>
+      <ul className="mt-4 flex flex-col gap-3">
+        {links.map((link) => (
+          <li key={link.label}>
+            <Link
+              href={link.href}
+              className="text-sm text-foreground/80 transition-colors hover:text-foreground"
+            >
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function Footer() {
   return (
     <footer className="border-t border-foreground/10 bg-background">
       <div className="mx-auto max-w-content px-gutter py-16">
-        <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        {/* Row 1: brand + Platform/Company/Legal — its own grid, so it
+            never has to share column math with the unrelated Buying/
+            Selling/Help group below. Explicit grid-cols-1 as the base
+            means phones always get a clean single-column stack, not
+            whatever the browser happens to do with an unset column count. */}
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
             <p className="font-display text-lg tracking-[0.08em] text-foreground">
               Fine<span className="text-accent">_</span>Arts
@@ -86,42 +111,20 @@ export function Footer() {
           </div>
 
           {COLUMNS.map((column) => (
-            <div key={column.heading}>
-              <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-muted">
-                {column.heading}
-              </p>
-              <ul className="mt-4 flex flex-col gap-3">
-                {column.links.map((link) => (
-                  <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="text-sm text-foreground/80 transition-colors hover:text-foreground"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <FooterColumn key={column.heading} heading={column.heading} links={column.links} />
           ))}
+        </div>
+
+        {/* Row 2: its own grid, its own breakpoints — a clean 3-column
+            layout at sm+ (these three groups are naturally similar in
+            length, unlike Row 1's brand block), single column on phones. */}
+        <div className="mt-12 grid grid-cols-1 gap-10 border-t border-foreground/10 pt-12 sm:grid-cols-3">
           {Object.entries(INFO_LINKS).map(([heading, links]) => (
-            <div key={heading}>
-              <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-muted">
-                {heading}
-              </p>
-              <ul className="mt-4 flex flex-col gap-3">
-                {links.map(([label, href]) => (
-                  <li key={label}>
-                    <Link
-                      href={href as Route}
-                      className="text-sm text-foreground/80 transition-colors hover:text-foreground"
-                    >
-                      {label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <FooterColumn
+              key={heading}
+              heading={heading}
+              links={links.map(([label, href]) => ({ label, href: href as Route }))}
+            />
           ))}
         </div>
 

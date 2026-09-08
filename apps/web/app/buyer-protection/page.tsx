@@ -12,7 +12,7 @@ export default function Page() {
           body: (
             <>
               Review artist and artwork information before committing. Keep important communication
-              on Artist_Platform and use the order record as your transaction reference.
+              on Fine_Arts and use the order record as your transaction reference.
             </>
           ),
         },

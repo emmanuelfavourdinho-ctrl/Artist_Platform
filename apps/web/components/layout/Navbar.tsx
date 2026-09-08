@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const NAV_LINKS: { label: string; href: Route }[] = [
   { label: 'Discover', href: '/gallery' },
-  { label: 'Artists', href: '/' },
+  { label: 'Commissions', href: '/commissions' },
   { label: 'Marketplace', href: '/gallery' },
   { label: 'Community', href: '/community' as Route },
 ];

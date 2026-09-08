@@ -14,6 +14,7 @@ import { usersRouter } from './userRoutes.js';
 import { favoriteRouter } from './favoriteRoutes.js';
 import { checkoutRouter } from './checkoutRoutes.js';
 import orderRouter from './orderRoutes.js';
+import { contactRouter } from './contactRoutes.js';
 
 const router = Router();
 router.use('/health', healthRouter);
@@ -31,5 +32,6 @@ router.use('/users', usersRouter);
 router.use('/favorites', favoriteRouter);
 router.use('/checkout', checkoutRouter);
 router.use('/orders', orderRouter);
+router.use('/contact', contactRouter);
 
 export { router };

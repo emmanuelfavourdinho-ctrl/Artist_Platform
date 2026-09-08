@@ -69,9 +69,7 @@ function RequestContent() {
       <p className="text-[13px] font-medium uppercase tracking-[0.3em] text-accent">
         Commission request
       </p>
-      <h1 className="mt-3 font-display text-5xl text-foreground">
-        Describe the work you want made.
-      </h1>
+      <h1 className="mt-3 font-display text-5xl text-foreground">Describe the work you want.</h1>
       <div className="mt-8 flex gap-3 text-xs uppercase tracking-[0.14em] text-muted">
         {[
           ['1', 'Idea'],

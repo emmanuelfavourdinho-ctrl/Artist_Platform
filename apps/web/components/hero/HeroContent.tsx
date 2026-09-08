@@ -16,7 +16,7 @@ export function HeroContent() {
         className="animate-reveal-up text-[13px] font-medium uppercase tracking-[0.3em] text-accent"
         style={{ '--reveal-delay': '200ms' } as CSSProperties}
       >
-        Artist_Platform
+        Fine_Arts
       </p>
 
       <h1

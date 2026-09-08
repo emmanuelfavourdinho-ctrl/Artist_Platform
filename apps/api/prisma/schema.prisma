@@ -320,7 +320,7 @@ model Artwork {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   publishedAt DateTime?
-
+  
   artist                ArtistProfile          @relation(fields: [artistId], references: [id], onDelete: Restrict)
   images                ArtworkImage[]
   categories            ArtworkCategory[]
@@ -336,6 +336,8 @@ model Artwork {
   inventoryReservations InventoryReservation[]
   Conversation          Conversation[]
   CommunityPost         CommunityPost[]
+  searchVector Unsupported("tsvector")?
+
 
   @@index([artistId])
   @@index([status])
@@ -978,4 +980,31 @@ model CommissionProposal {
 
   @@index([artistId])
   @@index([status])
+}
+
+enum ContactMessageStatus {
+  UNREAD
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+// The authoritative record of every contact-form submission. Email
+// (EmailJS) is a best-effort NOTIFICATION on top of this — emailSentAt/
+// emailError track whether that notification succeeded, but a failed
+// notification never prevents or deletes the underlying message here.
+model ContactMessage {
+  id          String               @id @default(uuid())
+  name        String
+  email       String
+  subject     String
+  message     String
+  status      ContactMessageStatus @default(UNREAD)
+  emailSentAt DateTime?
+  emailError  String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
