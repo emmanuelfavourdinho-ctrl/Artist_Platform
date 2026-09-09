@@ -20,6 +20,7 @@ function RegisterPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const intent = parseSignupIntent(searchParams.get('intent'));
+  const redirectTo = searchParams.get('redirect');
 
   useEffect(() => {
     if (!intent) router.replace('/welcome');
@@ -30,7 +31,8 @@ function RegisterPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const { error, emailPending, googlePending, anyPending, runEmail, runGoogle } = useAuthForm();
+  const { error, emailPending, googlePending, anyPending, runEmail, runGoogle } =
+    useAuthForm(redirectTo);
 
   if (!intent) return null;
 

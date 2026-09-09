@@ -1,9 +1,13 @@
+import Link from 'next/link';
 import type { ArtistProfileData } from '../../lib/artistsApi';
 import { CoverImage } from '../ui/CoverImage';
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
 
 export function ArtistHeader({ artist }: { artist: ArtistProfileData }) {
+  const commissionHref =
+    `/commissions/request?artistId=${encodeURIComponent(artist.id)}&artistSlug=${encodeURIComponent(artist.slug)}` as any;
+
   return (
     <div className="relative">
       <div className="aspect-[3/1] w-full overflow-hidden rounded-md bg-surface">
@@ -14,35 +18,51 @@ export function ArtistHeader({ artist }: { artist: ArtistProfileData }) {
         )}
       </div>
 
-      <div className="relative -mt-16 flex flex-col items-start gap-5 px-2 sm:flex-row sm:items-end">
-        <div className="h-28 w-28 shrink-0 overflow-hidden rounded-full border-4 border-background bg-surface">
-          {artist.profileImageUrl ? (
-            <CoverImage
-              src={artist.profileImageUrl}
-              alt={artist.name}
-              sizes="112px"
-              className="h-full w-full"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center font-display text-3xl text-muted">
-              {artist.name.charAt(0)}
-            </div>
-          )}
-        </div>
-
-        <div className="pb-2">
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-3xl text-foreground sm:text-4xl">{artist.name}</h1>
-            {artist.verified && (
-              <span aria-label="Verified artist" title="Verified artist" className="text-accent">
-                ✓
-              </span>
+      <div className="relative -mt-16 flex flex-col items-start gap-5 px-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-end">
+          <div className="h-28 w-28 shrink-0 overflow-hidden rounded-full border-4 border-background bg-surface">
+            {artist.profileImageUrl ? (
+              <CoverImage
+                src={artist.profileImageUrl}
+                alt={artist.name}
+                sizes="112px"
+                className="h-full w-full"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center font-display text-3xl text-muted">
+                {artist.name.charAt(0)}
+              </div>
             )}
           </div>
-          <p className="mt-1 text-sm text-muted">
-            {artist.location && <>{artist.location} · </>}
-            Joined {dateFormatter.format(new Date(artist.joinedAt))}
-          </p>
+
+          <div className="pb-2">
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-3xl text-foreground sm:text-4xl">{artist.name}</h1>
+              {artist.verified && (
+                <span aria-label="Verified artist" title="Verified artist" className="text-accent">
+                  ✓
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              {artist.location && <>{artist.location} · </>}
+              Joined {dateFormatter.format(new Date(artist.joinedAt))}
+            </p>
+          </div>
+        </div>
+
+        {/* Primary relationship entry point. Intentionally the only CTA on
+            this profile — no generic "Message artist" action — so contact
+            always starts with a concrete commission, not an open-ended
+            conversation. See ProtectedRoute for how the artist selection
+            survives an auth detour. */}
+        <div className="pb-2 sm:pb-0">
+          <Link
+            href={commissionHref}
+            className="inline-flex items-center justify-center whitespace-nowrap bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:opacity-90"
+          >
+            Request a Commission
+          </Link>
         </div>
       </div>
 

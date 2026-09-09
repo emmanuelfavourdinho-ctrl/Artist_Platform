@@ -23,7 +23,7 @@ interface UseAuthFormResult {
   runGoogle: (action: FirebaseAction, extra?: SyncExtra) => Promise<void>;
 }
 
-export function useAuthForm(): UseAuthFormResult {
+export function useAuthForm(redirectTo?: string | null): UseAuthFormResult {
   const router = useRouter();
   const { syncAfterAuth } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export function useAuthForm(): UseAuthFormResult {
         // AuthContext so its de-dupe guard registers it and the
         // background onAuthStateChanged listener skips re-doing it.
         const body = await syncAfterAuth(extra);
-        router.push(resolveAuthDestination(body));
+        router.push(resolveAuthDestination(body, redirectTo));
         router.refresh();
       } catch (err) {
         setError(mapFirebaseError(err));
@@ -52,7 +52,7 @@ export function useAuthForm(): UseAuthFormResult {
         setPending(false);
       }
     },
-    [router, syncAfterAuth],
+    [router, syncAfterAuth, redirectTo],
   );
 
   const runEmail = useCallback(

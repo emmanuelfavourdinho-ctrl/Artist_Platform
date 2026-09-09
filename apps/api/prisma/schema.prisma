@@ -105,6 +105,9 @@ model User {
   lastName        String
   phone           String?
   avatarUrl       String?
+  bio             String?
+  location        String?
+  coverImageUrl   String?
   status          UserStatus @default(PENDING_VERIFICATION)
   emailVerifiedAt DateTime?
   createdAt       DateTime   @default(now())
@@ -126,6 +129,8 @@ model User {
   conversationsAsBuyer  Conversation[]         @relation("BuyerConversations")
   messagesSent          Message[]
   communityPosts        CommunityPost[]        @relation("CommunityPostAuthor")
+  reportsSubmitted      Report[]               @relation("ReportsSubmitted")
+  reportsReviewed       Report[]               @relation("ReportsReviewed")
 
   @@index([status])
   @@index([createdAt])
@@ -320,8 +325,8 @@ model Artwork {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   publishedAt DateTime?
-  
-  artist                ArtistProfile          @relation(fields: [artistId], references: [id], onDelete: Restrict)
+
+  artist                ArtistProfile            @relation(fields: [artistId], references: [id], onDelete: Restrict)
   images                ArtworkImage[]
   categories            ArtworkCategory[]
   styles                ArtworkStyle[]
@@ -336,8 +341,7 @@ model Artwork {
   inventoryReservations InventoryReservation[]
   Conversation          Conversation[]
   CommunityPost         CommunityPost[]
-  searchVector Unsupported("tsvector")?
-
+  searchVector          Unsupported("tsvector")?
 
   @@index([artistId])
   @@index([status])
@@ -570,6 +574,7 @@ model OrderItem {
   @@index([artistId])
   @@index([artworkId])
 }
+
 // ===========================================================================
 // DOMAIN 7 — PAYMENT
 // ===========================================================================
@@ -1007,4 +1012,39 @@ model ContactMessage {
 
   @@index([status])
   @@index([createdAt])
+}
+
+enum ReportTargetType {
+  USER
+  ARTWORK
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+// One clean model for all "buyer or artist flags a problem" cases,
+// rather than a separate ad-hoc table per target type — matches your
+// own instruction not to build a messy collection of report systems.
+model Report {
+  id          String           @id @default(uuid())
+  reporterId  String
+  targetType  ReportTargetType
+  targetId    String
+  reason      String
+  description String?
+  status      ReportStatus     @default(PENDING)
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  reporter User  @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Restrict)
+  reviewer User? @relation("ReportsReviewed", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([reporterId])
 }

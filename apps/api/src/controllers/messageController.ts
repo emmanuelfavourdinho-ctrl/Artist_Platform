@@ -1,17 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
-import { prisma } from '../config/db.js';
+import { prisma } from '../lib/prisma.js';
 import { HttpError } from '../lib/httpError.js';
 import { createConversationSchema, sendMessageSchema } from '../schemas/messageSchemas.js';
-
-const conversationInclude = {
-  artist: {
-    select: { id: true, userId: true, displayName: true, slug: true, profileImageUrl: true },
-  },
-  buyer: { select: { id: true, firstName: true, lastName: true, email: true } },
-  commissionRequest: { select: { id: true, title: true, status: true } },
-  artwork: { select: { id: true, title: true, slug: true } },
-  order: { select: { id: true, orderNumber: true, status: true } },
-} as const;
+import { findOrCreateConversation, conversationInclude } from '../services/conversationService.js';
 
 function requireUser(req: Request): string {
   if (!req.user?.id) throw new HttpError(401, 'Login required', { code: 'AUTH_REQUIRED' });
@@ -66,29 +57,14 @@ export async function createConversation(req: Request, res: Response, next: Next
     const artist = await prisma.artistProfile.findUnique({ where: { id: input.artistId } });
     if (!artist) throw new HttpError(404, 'Artist not found', { code: 'ARTIST_NOT_FOUND' });
 
-    const existing = await prisma.conversation.findFirst({
-      where: {
-        buyerId,
-        artistId: input.artistId,
-        commissionRequestId: input.commissionRequestId ?? null,
-      },
-      include: conversationInclude,
+    const conversation = await findOrCreateConversation({
+      buyerId,
+      artistId: input.artistId,
+      commissionRequestId: input.commissionRequestId,
+      artworkId: input.artworkId,
+      orderId: input.orderId,
     });
-    if (existing) {
-      res.json({ status: 'success', data: existing });
-      return;
-    }
 
-    const conversation = await prisma.conversation.create({
-      data: {
-        buyerId,
-        artistId: input.artistId,
-        artworkId: input.artworkId,
-        orderId: input.orderId,
-        commissionRequestId: input.commissionRequestId,
-      },
-      include: conversationInclude,
-    });
     res.status(201).json({ status: 'success', data: conversation });
   } catch (error) {
     next(error);

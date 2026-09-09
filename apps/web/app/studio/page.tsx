@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   CloudinaryImageUpload,
   UploadedCloudinaryImage,
@@ -90,12 +91,20 @@ function StudioContent() {
             Artist Studio
           </h1>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-6 py-3 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] font-medium text-sm rounded-[var(--radius-sm)] transition-opacity hover:opacity-90"
-        >
-          + Publish New Work
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/studio/commissions"
+            className="px-6 py-3 border border-[rgb(var(--border)/0.2)] text-sm font-medium rounded-[var(--radius-sm)] transition hover:border-[rgb(var(--accent))]"
+          >
+            Commissions
+          </Link>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-6 py-3 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] font-medium text-sm rounded-[var(--radius-sm)] transition-opacity hover:opacity-90"
+          >
+            + Publish New Work
+          </button>
+        </div>
       </header>
 
       {/* Catalog Table */}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { resolveAuthDestination } from '../../lib/authRouting';
 
@@ -14,6 +14,8 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, allowRoles }: ProtectedRouteProps) {
   const { appUser, artistProfile, loading, error } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     // NEVER redirect while loading — this is the exact bug your spec
@@ -23,7 +25,12 @@ export function ProtectedRoute({ children, allowRoles }: ProtectedRouteProps) {
     if (loading) return;
 
     if (!appUser) {
-      router.replace('/login');
+      // Preserve exactly what the person was trying to reach — e.g.
+      // /commissions/request?artistId=... — so login/register can send
+      // them straight back instead of dropping them on a generic home.
+      const query = searchParams.toString();
+      const intended = query ? `${pathname}?${query}` : pathname;
+      router.replace(`/login?redirect=${encodeURIComponent(intended)}` as any);
       return;
     }
     if (allowRoles && !appUser.roles.some((r) => allowRoles.includes(r))) {
@@ -37,7 +44,7 @@ export function ProtectedRoute({ children, allowRoles }: ProtectedRouteProps) {
         }),
       );
     }
-  }, [loading, appUser, allowRoles, router]);
+  }, [loading, appUser, allowRoles, router, pathname, searchParams]);
 
   if (loading)
     return (

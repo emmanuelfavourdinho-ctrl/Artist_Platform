@@ -1,9 +1,14 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Reveal } from '../../components/ui/Reveal';
 
-export default function WelcomePage() {
+function WelcomePageContent() {
+  const redirectTo = useSearchParams().get('redirect');
+  const redirectSuffix = redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : '';
+
   return (
     <main className="mx-auto flex min-h-screen max-w-content flex-col items-center justify-center px-gutter py-16 text-center">
       <Reveal>
@@ -16,7 +21,7 @@ export default function WelcomePage() {
       <Reveal delay={120}>
         <div className="mt-12 grid w-full max-w-xl gap-4 sm:grid-cols-2">
           <Link
-            href="/register?intent=artist"
+            href={`/register?intent=artist${redirectSuffix}` as any}
             className="rounded-lg border border-foreground/10 p-8 text-left transition hover:border-accent"
           >
             <span className="font-display text-xl text-foreground">I&apos;m an Artist</span>
@@ -24,7 +29,7 @@ export default function WelcomePage() {
           </Link>
 
           <Link
-            href="/register?intent=buyer"
+            href={`/register?intent=buyer${redirectSuffix}` as any}
             className="rounded-lg border border-foreground/10 p-8 text-left transition hover:border-accent"
           >
             <span className="font-display text-xl text-foreground">I want to Buy Art</span>
@@ -36,11 +41,24 @@ export default function WelcomePage() {
       <Reveal delay={200}>
         <p className="mt-10 text-sm text-muted">
           Already have an account?{' '}
-          <Link href="/login" className="font-medium text-accent underline underline-offset-2">
+          <Link
+            href={
+              redirectTo ? (`/login?redirect=${encodeURIComponent(redirectTo)}` as any) : '/login'
+            }
+            className="font-medium text-accent underline underline-offset-2"
+          >
             Log in
           </Link>
         </p>
       </Reveal>
     </main>
+  );
+}
+
+export default function WelcomePage() {
+  return (
+    <Suspense fallback={null}>
+      <WelcomePageContent />
+    </Suspense>
   );
 }

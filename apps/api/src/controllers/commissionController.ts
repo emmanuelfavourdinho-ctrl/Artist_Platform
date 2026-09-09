@@ -66,6 +66,15 @@ export async function createCommission(req: Request, res: Response, next: NextFu
         currency: input.currency,
         deadline: input.deadline,
         references: { create: input.references },
+        // Every commission gets its conversation up front, created by the
+        // buyer who owns the request — never by the artist reviewing it
+        // later (see messageController.createConversation, which always
+        // attributes the caller as the buyer; letting the artist trigger
+        // conversation creation there would mislabel them). The nested
+        // write here is atomic with the commission itself and safe against
+        // duplicate submission, since Conversation.commissionRequestId is
+        // @unique at the database level.
+        conversation: { create: { buyerId, artistId: input.artistId } },
       },
       include: commissionInclude,
     });

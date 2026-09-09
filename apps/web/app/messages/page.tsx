@@ -1,15 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
+import { StatusBadge } from '../../components/ui/StatusBadge';
 import { useAuth } from '../../context/AuthContext';
 import { marketplaceFetch } from '../../lib/marketplaceApi';
+import { getCommissionStatusMeta } from '../../lib/commissionStatus';
 
 interface Conversation {
   id: string;
-  artist: { displayName: string };
+  artist: { displayName: string; slug: string };
   buyer: { firstName: string; lastName: string };
-  commissionRequest: { title: string } | null;
+  commissionRequest: { id: string; title: string; status: string } | null;
+  artwork: { id: string; title: string; slug: string } | null;
+  order: { id: string; orderNumber: string; status: string } | null;
   messages: { body: string; createdAt: string }[];
 }
 interface Message {
@@ -19,21 +24,76 @@ interface Message {
   createdAt: string;
 }
 
+// Names what a conversation is about, always — the requirement from
+// Document 2 §7 that communication should never feel like it started
+// from nowhere. Commission context takes priority (it's the primary
+// entry point per the product decision), then artwork, then order;
+// falls back to a neutral label rather than leaving the space blank.
+function ConversationContextBanner({ conversation }: { conversation: Conversation }) {
+  if (conversation.commissionRequest) {
+    const { label, tone } = getCommissionStatusMeta(conversation.commissionRequest.status);
+    return (
+      <div className="border-b border-border/10 bg-surface px-5 py-3">
+        <p className="text-xs uppercase tracking-[0.14em] text-muted">Commission</p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <p className="text-sm text-foreground">{conversation.commissionRequest.title}</p>
+          <StatusBadge tone={tone} label={label} />
+        </div>
+      </div>
+    );
+  }
+
+  if (conversation.artwork) {
+    return (
+      <div className="border-b border-border/10 bg-surface px-5 py-3">
+        <p className="text-xs uppercase tracking-[0.14em] text-muted">About this artwork</p>
+        <p className="mt-1.5 text-sm text-foreground">{conversation.artwork.title}</p>
+      </div>
+    );
+  }
+
+  if (conversation.order) {
+    return (
+      <div className="border-b border-border/10 bg-surface px-5 py-3">
+        <p className="text-xs uppercase tracking-[0.14em] text-muted">About this order</p>
+        <p className="mt-1.5 text-sm text-foreground">Order #{conversation.order.orderNumber}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-b border-border/10 bg-surface px-5 py-3">
+      <p className="text-sm text-muted">General conversation</p>
+    </div>
+  );
+}
+
+function ConversationSubtitle({ conversation }: { conversation: Conversation }) {
+  if (conversation.commissionRequest) return <>{conversation.commissionRequest.title}</>;
+  if (conversation.artwork) return <>{conversation.artwork.title}</>;
+  if (conversation.order) return <>Order #{conversation.order.orderNumber}</>;
+  return <>Marketplace conversation</>;
+}
+
 function MessagesContent() {
   const { firebaseUser, appUser } = useAuth();
+  const conversationIdParam = useSearchParams().get('conversationId');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [listLoaded, setListLoaded] = useState(false);
 
   useEffect(() => {
     if (firebaseUser)
       void marketplaceFetch(firebaseUser, '/messages')
         .then((response) => response.json())
         .then((result) => setConversations(result.data ?? []))
-        .catch(() => setError('Unable to load messages.'));
+        .catch(() => setError('Unable to load messages.'))
+        .finally(() => setListLoaded(true));
   }, [firebaseUser]);
+
   async function openConversation(conversation: Conversation) {
     if (!firebaseUser) return;
     setSelected(conversation);
@@ -41,6 +101,33 @@ function MessagesContent() {
     const result = await response.json();
     setMessages(result.data?.messages ?? []);
   }
+
+  // Deep-link support for "Continue Discussion" (studio commission review)
+  // and any future entry point that already knows which conversation it
+  // wants: once the list has loaded, open the matching thread. If the
+  // conversation isn't in the freshly-loaded list — for example a brand
+  // new one created a moment ago — fetch it directly by id instead of
+  // silently doing nothing, since GET /messages/:id already enforces the
+  // caller is a participant.
+  useEffect(() => {
+    if (!listLoaded || !conversationIdParam || !firebaseUser || selected) return;
+    const match = conversations.find((c) => c.id === conversationIdParam);
+    if (match) {
+      void openConversation(match);
+      return;
+    }
+    marketplaceFetch(firebaseUser, `/messages/${conversationIdParam}`)
+      .then((response) => {
+        if (!response.ok) throw new Error('not found');
+        return response.json();
+      })
+      .then((result) => {
+        setSelected(result.data);
+        setMessages(result.data?.messages ?? []);
+      })
+      .catch(() => setError('That conversation could not be found.'));
+  }, [listLoaded, conversationIdParam, firebaseUser, conversations]);
+
   async function send() {
     if (!firebaseUser || !selected || !body.trim()) return;
     const response = await marketplaceFetch(firebaseUser, `/messages/${selected.id}/messages`, {
@@ -75,7 +162,7 @@ function MessagesContent() {
               >
                 <p className="text-sm text-foreground">{conversation.artist.displayName}</p>
                 <p className="mt-1 text-xs text-muted">
-                  {conversation.commissionRequest?.title ?? 'Marketplace conversation'}
+                  <ConversationSubtitle conversation={conversation} />
                 </p>
                 <p className="mt-2 truncate text-xs text-muted">
                   {conversation.messages[0]?.body ?? 'No messages yet'}
@@ -95,10 +182,8 @@ function MessagesContent() {
                 <h2 className="font-display text-2xl text-foreground">
                   {selected.artist.displayName}
                 </h2>
-                <p className="mt-1 text-xs text-muted">
-                  {selected.commissionRequest?.title ?? 'Marketplace conversation'}
-                </p>
               </div>
+              <ConversationContextBanner conversation={selected} />
               <div className="flex-1 space-y-4 p-5">
                 {messages.map((message) => (
                   <p
@@ -140,7 +225,9 @@ function MessagesContent() {
 export default function MessagesPage() {
   return (
     <ProtectedRoute>
-      <MessagesContent />
+      <Suspense fallback={null}>
+        <MessagesContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }

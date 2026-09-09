@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { Suspense, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { AuthField } from '../../components/auth/AuthField';
@@ -14,11 +15,13 @@ import { Reveal } from '../../components/ui/Reveal';
 import { loginWithEmail, loginWithGoogle } from '../../lib/authClient';
 import { useAuthForm } from '../../lib/useAuthForm';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const redirectTo = useSearchParams().get('redirect');
 
-  const { error, emailPending, googlePending, anyPending, runEmail, runGoogle } = useAuthForm();
+  const { error, emailPending, googlePending, anyPending, runEmail, runGoogle } =
+    useAuthForm(redirectTo);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,11 +106,26 @@ export default function LoginPage() {
       <Reveal delay={200}>
         <p className="mt-8 text-center text-sm text-muted">
           Need an account?{' '}
-          <Link href="/welcome" className="font-medium text-accent underline underline-offset-2">
+          <Link
+            href={
+              redirectTo
+                ? (`/welcome?redirect=${encodeURIComponent(redirectTo)}` as any)
+                : '/welcome'
+            }
+            className="font-medium text-accent underline underline-offset-2"
+          >
             Create one
           </Link>
         </p>
       </Reveal>
     </AuthLayout>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
