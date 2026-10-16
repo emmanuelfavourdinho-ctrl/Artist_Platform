@@ -1,86 +1,186 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ModerationQueueItem } from '../../components/admin/ModerationQueueItem';
-import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
-import { useAuth } from '../../context/AuthContext';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import type { Route } from 'next';
+import { EmptyBox, ErrorBox, PageHeader, SkeletonCards, StatCard } from '../../components/admin/AdminUi';
+import { fetchAdminOverview, type AdminOverview } from '../../lib/adminApi';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
+// Order states in lifecycle order, so the breakdown reads left-to-right
+// the way an order actually progresses. Unknown statuses from the API are
+// still shown (appended) rather than dropped.
+const ORDER_STATUS_ORDER = [
+  'PENDING',
+  'CONFIRMED',
+  'PROCESSING',
+  'SHIPPED',
+  'DELIVERED',
+  'CANCELLED',
+  'REFUNDED',
+  'PARTIALLY_REFUNDED',
+];
 
-interface PendingReview {
-  id: string;
-  rating: number;
-  title: string | null;
-  comment: string | null;
-  createdAt: string;
-  user: { firstName: string; lastName: string; email: string };
-  artwork: { id: string; title: string } | null;
+function label(status: string): string {
+  return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
-function AdminContent() {
-  const { firebaseUser } = useAuth();
-  const [reviews, setReviews] = useState<PendingReview[]>([]);
-  const [loading, setLoading] = useState(true);
+interface QueueRow {
+  title: string;
+  count: number;
+  href?: string;
+  note?: string;
+}
+
+function OverviewContent() {
+  const [data, setData] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(() => {
+    setError(null);
+    setData(null);
+    fetchAdminOverview()
+      .then(setData)
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : 'Could not load the overview.'),
+      );
+  }, []);
 
-    async function loadQueue() {
-      try {
-        const token = await firebaseUser?.getIdToken();
-        const response = await fetch(`${API_URL}/api/v1/admin/reviews`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          cache: 'no-store',
-        });
-        if (!response.ok) throw new Error(`Request failed (${response.status})`);
-        const body = await response.json();
-        if (!cancelled) setReviews(body.data as PendingReview[]);
-      } catch {
-        if (!cancelled) setError('We could not load the moderation queue. Please try again.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
+  useEffect(load, [load]);
 
-    if (firebaseUser) void loadQueue();
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser]);
+  const queues: QueueRow[] = data
+    ? [
+        { title: 'Reviews awaiting moderation', count: data.queues.pendingReviews, href: '/admin/reviews' },
+        { title: 'Unread contact messages', count: data.queues.unreadContactMessages, href: '/admin/messages' },
+        {
+          title: 'Artists pending verification',
+          count: data.queues.pendingArtistVerification,
+          note: 'Verification tools are not built yet',
+        },
+        {
+          title: 'Open reports',
+          count: data.queues.openReports,
+          note: 'Report review is not built yet',
+        },
+      ]
+    : [];
 
-  if (loading)
-    return <p className="py-24 text-center text-sm text-muted">Loading moderation queue…</p>;
-  if (error) return <p className="py-24 text-center text-sm text-red-400">{error}</p>;
+  const orderStatuses = data
+    ? [
+        ...ORDER_STATUS_ORDER.filter((s) => s in data.orders.byStatus),
+        ...Object.keys(data.orders.byStatus).filter((s) => !ORDER_STATUS_ORDER.includes(s)),
+      ]
+    : [];
 
   return (
-    <div>
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-        <h1 className="font-display text-3xl text-foreground">Review Moderation</h1>
-        <p className="text-sm text-muted">
-          {reviews.length} pending review{reviews.length === 1 ? '' : 's'}
-        </p>
-      </div>
+    <div className="space-y-10">
+      <PageHeader
+        eyebrow="Workspace"
+        title="Overview"
+        description="Live counts from the marketplace database and the queues that need a decision."
+        action={
+          <Link
+            href={'/admin/analytics' as Route}
+            className="rounded-md border border-border/15 px-4 py-2 text-sm text-foreground/80 transition hover:border-accent hover:text-accent"
+          >
+            View analytics →
+          </Link>
+        }
+      />
 
-      {reviews.length === 0 ? (
-        <div className="mt-16 rounded-lg border border-border/10 bg-surface px-8 py-16 text-center">
-          <p className="text-sm text-muted">The queue is empty - nothing waiting on moderation.</p>
-        </div>
-      ) : (
-        <ul className="mt-8 flex flex-col gap-4">
-          {reviews.map((review) => (
-            <ModerationQueueItem key={review.id} review={review} />
-          ))}
-        </ul>
+      {error && <ErrorBox message={error} onRetry={load} />}
+      {!error && !data && <SkeletonCards count={4} />}
+
+      {data && (
+        <>
+          <section aria-labelledby="totals-heading">
+            <h2 id="totals-heading" className="sr-only">
+              Marketplace totals
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label="Registered users" value={data.users.total} />
+              <StatCard label="Artists" value={data.artists.total} />
+              <StatCard
+                label="Artworks"
+                value={data.artworks.total}
+                hint={`${data.artworks.published} published`}
+              />
+              <StatCard label="Orders" value={data.orders.total} hint="All time" />
+            </div>
+          </section>
+
+          <section aria-labelledby="queues-heading">
+            <h2 id="queues-heading" className="font-display text-xl text-foreground">
+              Needs attention
+            </h2>
+            <ul className="mt-4 divide-y divide-border/10 rounded-lg border border-border/10 bg-surface">
+              {queues.map((row) => {
+                const body = (
+                  <div className="flex items-center justify-between gap-4 px-5 py-4">
+                    <div>
+                      <p className="text-sm text-foreground">{row.title}</p>
+                      {row.note && <p className="mt-0.5 text-xs text-muted">{row.note}</p>}
+                    </div>
+                    <span
+                      className={`font-display text-2xl ${
+                        row.count > 0 ? 'text-accent' : 'text-muted'
+                      }`}
+                    >
+                      {row.count}
+                    </span>
+                  </div>
+                );
+                return (
+                  <li key={row.title}>
+                    {row.href ? (
+                      <Link
+                        href={row.href as Route}
+                        className="block transition-colors hover:bg-surface-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                      >
+                        {body}
+                      </Link>
+                    ) : (
+                      body
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <section aria-labelledby="orders-heading">
+            <h2 id="orders-heading" className="font-display text-xl text-foreground">
+              Orders by status
+            </h2>
+            {orderStatuses.length === 0 ? (
+              <div className="mt-4">
+                <EmptyBox
+                  title="No orders yet"
+                  description="Order counts will appear here once buyers start checking out."
+                />
+              </div>
+            ) : (
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {orderStatuses.map((status) => (
+                  <div key={status} className="rounded-lg border border-border/10 bg-surface px-5 py-4">
+                    <dt className="text-xs uppercase tracking-[0.12em] text-muted">{label(status)}</dt>
+                    <dd className="mt-1 font-display text-2xl text-foreground">
+                      {data.orders.byStatus[status]}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+
+          <p className="text-xs text-muted">
+            Recent activity is not shown because the platform does not record an activity feed yet.
+          </p>
+        </>
       )}
     </div>
   );
 }
 
-export default function AdminPage() {
-  return (
-    <ProtectedRoute allowRoles={['ADMIN']}>
-      <AdminContent />
-    </ProtectedRoute>
-  );
+export default function AdminOverviewPage() {
+  return <OverviewContent />;
 }

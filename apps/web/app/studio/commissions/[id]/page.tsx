@@ -31,11 +31,7 @@ interface CommissionDetail {
 
 type PendingAction = 'accept' | 'decline' | null;
 
-const dateFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'long',
-  day: 'numeric',
-  year: 'numeric',
-});
+const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
 function CommissionDetailContent() {
   const { id } = useParams<{ id: string }>();
@@ -64,14 +60,10 @@ function CommissionDetailContent() {
     setSubmitting(true);
     setActionError(null);
     try {
-      const response = await marketplaceFetch(
-        firebaseUser,
-        `/commissions/${commission.id}/status`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ status }),
-        },
-      );
+      const response = await marketplaceFetch(firebaseUser, `/commissions/${commission.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
       if (!response.ok) throw new Error('That update did not go through. Please try again.');
       const result = await response.json();
       setCommission(result.data);
@@ -120,10 +112,7 @@ function CommissionDetailContent() {
 
   return (
     <main className="mx-auto min-h-screen max-w-content px-gutter py-16 sm:py-24">
-      <Link
-        href={'/studio/commissions' as any}
-        className="text-sm text-muted hover:text-foreground"
-      >
+      <Link href={'/studio/commissions' as any} className="text-sm text-muted hover:text-foreground">
         ← Commissions
       </Link>
 
@@ -147,7 +136,7 @@ function CommissionDetailContent() {
           <section>
             <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-muted">Brief</h2>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground/90">
-              commission.description
+              {commission.description}
             </p>
           </section>
 
@@ -158,8 +147,7 @@ function CommissionDetailContent() {
               </h2>
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {commission.references.map((reference) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  
+                  <img
                     key={reference.id}
                     src={reference.url}
                     alt={reference.fileName ?? 'Reference image'}
@@ -181,17 +169,13 @@ function CommissionDetailContent() {
               <div>
                 <dt className="text-xs uppercase tracking-[0.14em] text-muted">Budget</dt>
                 <dd className="mt-1 text-foreground">
-                  {commission.budget
-                    ? `${commission.currency ?? ''} ${commission.budget}`.trim()
-                    : 'Not specified'}
+                  {commission.budget ? `${commission.currency ?? ''} ${commission.budget}`.trim() : 'Not specified'}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-[0.14em] text-muted">Deadline</dt>
                 <dd className="mt-1 text-foreground">
-                  {commission.deadline
-                    ? dateFormatter.format(new Date(commission.deadline))
-                    : 'Flexible'}
+                  {commission.deadline ? dateFormatter.format(new Date(commission.deadline)) : 'Flexible'}
                 </dd>
               </div>
               {commission.notes && (
@@ -208,11 +192,7 @@ function CommissionDetailContent() {
               type="button"
               onClick={continueDiscussion}
               disabled={!commission.conversation}
-              title={
-                commission.conversation
-                  ? undefined
-                  : 'Conversation unavailable for this legacy request'
-              }
+              title={commission.conversation ? undefined : 'Conversation unavailable for this legacy request'}
               className="w-full border border-border/20 px-5 py-3 text-sm text-foreground transition hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               Continue Discussion
@@ -268,8 +248,7 @@ function CommissionDetailContent() {
                 {confirming === 'decline' && (
                   <div className="space-y-3 border border-red-500/30 bg-red-500/5 p-4">
                     <p className="text-sm text-foreground">
-                      Decline this commission from {commission.buyer.firstName}? This can&apos;t be
-                      undone.
+                      Decline this commission from {commission.buyer.firstName}? This can&apos;t be undone.
                     </p>
                     <div className="flex gap-3">
                       <button

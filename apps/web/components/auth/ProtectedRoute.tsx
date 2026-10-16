@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { resolveAuthDestination } from '../../lib/authRouting';
@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
   allowRoles?: string[];
 }
 
-export function ProtectedRoute({ children, allowRoles }: ProtectedRouteProps) {
+function ProtectedRouteInner({ children, allowRoles }: ProtectedRouteProps) {
   const { appUser, artistProfile, loading, error } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -62,4 +62,23 @@ export function ProtectedRoute({ children, allowRoles }: ProtectedRouteProps) {
   if (allowRoles && !appUser.roles.some((r) => allowRoles.includes(r))) return null;
 
   return <>{children}</>;
+}
+
+// useSearchParams() (used above to preserve the intended destination
+// through login) must sit inside a Suspense boundary or Next.js fails
+// static prerendering of every page that uses this component. Putting the
+// boundary here, once, protects all current and future callers instead of
+// requiring each page to remember it.
+export function ProtectedRoute(props: ProtectedRouteProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-muted">
+          Loading…
+        </div>
+      }
+    >
+      <ProtectedRouteInner {...props} />
+    </Suspense>
+  );
 }

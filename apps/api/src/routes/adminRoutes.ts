@@ -10,8 +10,11 @@ import {
   updateContactMessageStatus,
 } from '../controllers/contactController.js';
 import { updateContactMessageStatusSchema } from '../validation/contact.js';
+import { getOverview } from '../controllers/adminOverviewController.js';
 
 export const adminRouter = Router();
+
+adminRouter.get('/overview', requireAdmin, asyncHandler(getOverview));
 
 adminRouter.get('/reviews', requireAdmin, asyncHandler(listPendingReviews));
 adminRouter.patch(

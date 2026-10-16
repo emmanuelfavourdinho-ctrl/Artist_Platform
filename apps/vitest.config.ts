@@ -20,6 +20,13 @@ export default defineConfig({
       FIREBASE_PROJECT_ID: 'artist-platform-test',
       FIREBASE_CLIENT_EMAIL: 'firebase-adminsdk-test@artist-platform-test.iam.gserviceaccount.com',
       FIREBASE_PRIVATE_KEY: 'test-only-placeholder',
+      // Required by the API config schema since the Stripe/Firebase
+      // service-account work landed. Fake, test-only values: nothing in
+      // the test suite connects to Stripe or Firebase (both are mocked).
+      FIREBASE_SERVICE_ACCOUNT_BASE64: 'dGVzdC1vbmx5LXBsYWNlaG9sZGVy',
+      STRIPE_SECRET_KEY: 'sk_test_placeholder_not_a_real_key',
+      STRIPE_WEBHOOK_SECRET: 'whsec_placeholder_not_a_real_secret',
+      DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
     },
   },
 });

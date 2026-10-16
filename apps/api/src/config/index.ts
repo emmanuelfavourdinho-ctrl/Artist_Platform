@@ -30,6 +30,8 @@ dotenv.config();
   quotes, mangled \n escapes, wrong file encoding). Base64 has no
   characters those tools ever touch.
 */
+const isTestEnvironment = process.env.NODE_ENV === 'test';
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().int().positive().max(65535).default(4000),
@@ -37,13 +39,19 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().optional(),
   API_URL: z.string().url().optional(),
   CORS_ORIGIN: z.string().optional(),
-  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
-  COOKIE_SECRET: z.string().min(32, 'COOKIE_SECRET must be at least 32 characters long'),
+  JWT_SECRET: isTestEnvironment
+    ? z.string().min(32, 'JWT_SECRET must be at least 32 characters long').default('test-jwt-secret-for-local-development-12345')
+    : z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
+  COOKIE_SECRET: isTestEnvironment
+    ? z.string().min(32, 'COOKIE_SECRET must be at least 32 characters long').default('test-cookie-secret-for-local-development-12345')
+    : z.string().min(32, 'COOKIE_SECRET must be at least 32 characters long'),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
 
-  FIREBASE_SERVICE_ACCOUNT_BASE64: z.string().min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required'),
+  FIREBASE_SERVICE_ACCOUNT_BASE64: isTestEnvironment
+    ? z.string().min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required').default('eyJ0ZW1wbGF0ZSI6InRlc3QifQ==')
+    : z.string().min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required'),
 
   // Set TRUST_PROXY explicitly to override the production-only default
   // below — e.g. TRUST_PROXY=false if you're running behind something
@@ -58,8 +66,12 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   JSON_BODY_LIMIT: z.string().default('1mb'),
 
-  STRIPE_SECRET_KEY: z.string().min(1, 'STRIPE_SECRET_KEY is required'),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1, 'STRIPE_WEBHOOK_SECRET is required'),
+  STRIPE_SECRET_KEY: isTestEnvironment
+    ? z.string().min(1, 'STRIPE_SECRET_KEY is required').default('sk_test_placeholder_key')
+    : z.string().min(1, 'STRIPE_SECRET_KEY is required'),
+  STRIPE_WEBHOOK_SECRET: isTestEnvironment
+    ? z.string().min(1, 'STRIPE_WEBHOOK_SECRET is required').default('whsec_test_placeholder_key')
+    : z.string().min(1, 'STRIPE_WEBHOOK_SECRET is required'),
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   PLATFORM_COMMISSION_RATE: z.coerce.number().min(0).max(1).default(0.15),
 });
