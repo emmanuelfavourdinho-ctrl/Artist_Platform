@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ModerationQueueItem } from '../../../components/admin/ModerationQueueItem';
 import { ProtectedRoute } from '../../../components/auth/ProtectedRoute';
+import { STAFF_ROLE_NAMES } from '../../../lib/adminApi';
 import { useAuth } from '../../../context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
@@ -79,7 +80,7 @@ function ReviewsContent() {
 
 export default function AdminReviewsPage() {
   return (
-    <ProtectedRoute allowRoles={['ADMIN']}>
+    <ProtectedRoute allowRoles={STAFF_ROLE_NAMES}>
       <ReviewsContent />
     </ProtectedRoute>
   );

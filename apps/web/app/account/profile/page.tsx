@@ -14,13 +14,17 @@ function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     ACTIVE: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
     PENDING_VERIFICATION: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+    RESTRICTED: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
     SUSPENDED: 'bg-red-500/10 text-red-600 border-red-500/20',
+    BANNED: 'bg-red-500/20 text-red-700 border-red-500/40',
     DEACTIVATED: 'bg-foreground/10 text-muted border-foreground/20',
   };
   const label: Record<string, string> = {
     ACTIVE: 'Active',
     PENDING_VERIFICATION: 'Pending verification',
+    RESTRICTED: 'Restricted',
     SUSPENDED: 'Suspended',
+    BANNED: 'Banned',
     DEACTIVATED: 'Deactivated',
   };
   return (

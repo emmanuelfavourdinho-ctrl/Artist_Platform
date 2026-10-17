@@ -35,6 +35,20 @@ async function main() {
     }),
   ]);
 
+  // Staff roles used by the permission matrix (src/lib/permissions.ts).
+  await Promise.all([
+    prisma.role.upsert({
+      where: { name: 'MODERATOR' },
+      update: {},
+      create: { name: 'MODERATOR', description: 'Reviews users, artists, artwork and reports' },
+    }),
+    prisma.role.upsert({
+      where: { name: 'FINANCE_ADMIN' },
+      update: {},
+      create: { name: 'FINANCE_ADMIN', description: 'Views and manages financial records' },
+    }),
+  ]);
+
   console.log('Seeding taxonomy...');
   const categoryNames = ['Painting', 'Photography', 'Sculpture', 'Digital Art'];
   const categories = await Promise.all(

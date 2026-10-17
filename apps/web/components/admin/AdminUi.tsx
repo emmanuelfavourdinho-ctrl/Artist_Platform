@@ -99,3 +99,65 @@ export function formatMoney(amount: number, currency: string): string {
     return `${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${currency}`;
   }
 }
+
+const PILL_TONES: Record<string, string> = {
+  ACTIVE: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  PENDING_VERIFICATION: 'bg-sky-500/10 text-sky-500 border-sky-500/20',
+  RESTRICTED: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  SUSPENDED: 'bg-red-500/10 text-red-400 border-red-500/20',
+  BANNED: 'bg-red-500/20 text-red-300 border-red-500/40',
+  DEACTIVATED: 'bg-foreground/10 text-muted border-foreground/20',
+};
+
+// Status is always shown as text as well as colour, so it never relies on
+// colour alone.
+export function StatusPill({ status }: { status: string }) {
+  return (
+    <span
+      className={`inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.08em] ${
+        PILL_TONES[status] ?? 'bg-foreground/10 text-muted border-foreground/20'
+      }`}
+    >
+      {status.replace(/_/g, ' ').toLowerCase()}
+    </span>
+  );
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  onChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return <p className="text-xs text-muted">{total} total</p>;
+  return (
+    <nav aria-label="Pagination" className="flex items-center justify-between gap-4 text-sm">
+      <p className="text-xs text-muted">
+        Page {page} of {totalPages} · {total} total
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => onChange(page - 1)}
+          className="rounded-md border border-border/15 px-3 py-1.5 text-xs transition enabled:hover:border-accent disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={() => onChange(page + 1)}
+          className="rounded-md border border-border/15 px-3 py-1.5 text-xs transition enabled:hover:border-accent disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    </nav>
+  );
+}

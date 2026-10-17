@@ -89,11 +89,19 @@ datasource db {
 // DOMAIN 1 — IDENTITY & ACCESS
 // ===========================================================================
 
+// RESTRICTED: can sign in and browse but cannot create marketplace
+//   activity (see requireGoodStanding). SUSPENDED / BANNED / DEACTIVATED:
+//   cannot use any authenticated endpoint (see requireAuth). SUSPENDED and
+//   RESTRICTED may be temporary (UserEnforcement.expiresAt); BANNED is
+//   permanent until an authorised reinstatement. DEACTIVATED is the
+//   user's own choice and is not changed by admin enforcement.
 enum UserStatus {
   ACTIVE
   SUSPENDED
   DEACTIVATED
   PENDING_VERIFICATION
+  RESTRICTED
+  BANNED
 }
 
 model User {
@@ -129,6 +137,8 @@ model User {
   conversationsAsBuyer  Conversation[]         @relation("BuyerConversations")
   messagesSent          Message[]
   communityPosts        CommunityPost[]        @relation("CommunityPostAuthor")
+  enforcementsReceived  UserEnforcement[]      @relation("EnforcementTarget")
+  enforcementsIssued    UserEnforcement[]      @relation("EnforcementActor")
   reportsSubmitted      Report[]               @relation("ReportsSubmitted")
   reportsReviewed       Report[]               @relation("ReportsReviewed")
 
@@ -854,6 +864,9 @@ enum AuditAction {
   SYSTEM_SETTING_CHANGED
   REVIEW_APPROVED
   REVIEW_REJECTED
+  USER_STATUS_CHANGED
+  USER_WARNED
+  REPORT_REVIEWED
 }
 
 model AuditLog {
@@ -862,6 +875,8 @@ model AuditLog {
   action     AuditAction
   entityType String
   entityId   String?
+  reason     String?
+  requestId  String?
   metadata   Json?
   ipAddress  String?
   userAgent  String?
@@ -873,6 +888,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([action])
+  @@index([requestId])
 }
 
 // ===========================================================================
@@ -1047,4 +1063,49 @@ model Report {
   @@index([targetType, targetId])
   @@index([status])
   @@index([reporterId])
+}
+
+// ===========================================================================
+// DOMAIN 18 — ENFORCEMENT HISTORY
+// ===========================================================================
+
+enum EnforcementAction {
+  WARNING
+  RESTRICTION
+  SUSPENSION
+  BAN
+  REINSTATEMENT
+}
+
+// One row per enforcement decision against a user. `User.status` is the
+// authoritative CURRENT state; this table is the history that explains
+// how it got there and when a temporary measure ends.
+//
+// A RESTRICTION / SUSPENSION / BAN row is "active" while `endedAt` is
+// null. It ends when an admin reinstates the user, when it is replaced by
+// a more severe action, or when `expiresAt` passes (the API reinstates
+// lazily on the user's next request, so a failed scheduled job can never
+// leave an expired suspension in force). `actorId` is null for those
+// automatic expiries. `reportId` is a plain reference (no FK) so this
+// table does not depend on how reports are modelled.
+model UserEnforcement {
+  id             String            @id @default(uuid())
+  userId         String
+  actorId        String?
+  action         EnforcementAction
+  reason         String
+  previousStatus UserStatus?
+  newStatus      UserStatus?
+  expiresAt      DateTime?
+  endedAt        DateTime?
+  endedReason    String?
+  reportId       String?
+  createdAt      DateTime          @default(now())
+
+  user  User  @relation("EnforcementTarget", fields: [userId], references: [id], onDelete: Restrict)
+  actor User? @relation("EnforcementActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, endedAt])
+  @@index([expiresAt])
 }

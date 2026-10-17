@@ -129,7 +129,7 @@ export function Footer() {
         </div>
 
         <div className="mt-16 flex flex-col gap-3 border-t border-foreground/10 pt-8 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} FineArts. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Fine Arts. All rights reserved.</p>
           <p>Made for people who make things.</p>
           <p>Powered by EMMATECH</p>
         </div>

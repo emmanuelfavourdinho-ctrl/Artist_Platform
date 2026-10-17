@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ProtectedRoute } from '../../../components/auth/ProtectedRoute';
+import { STAFF_ROLE_NAMES } from '../../../lib/adminApi';
 import {
   fetchContactMessages,
   updateMessageStatus,
@@ -143,7 +144,7 @@ function MessagesContent() {
 
 export default function AdminMessagesPage() {
   return (
-    <ProtectedRoute allowRoles={['ADMIN']}>
+    <ProtectedRoute allowRoles={STAFF_ROLE_NAMES}>
       <MessagesContent />
     </ProtectedRoute>
   );

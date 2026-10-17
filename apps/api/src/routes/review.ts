@@ -4,6 +4,7 @@ import { listApprovedReviews, submitReview } from '../controllers/reviewControll
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { reviewRateLimiter } from '../middleware/reviewRateLimiter.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { requireGoodStanding } from '../middleware/requireGoodStanding.js';
 import { validateBody } from '../middleware/validateBody.js';
 import { submitReviewSchema } from '../validation/review.js';
 
@@ -22,6 +23,7 @@ export const reviewsRouter = Router();
 reviewsRouter.post(
   '/:artworkId/reviews',
   requireAuth,
+  requireGoodStanding,
   reviewRateLimiter,
   validateBody(submitReviewSchema),
   asyncHandler(submitReview),

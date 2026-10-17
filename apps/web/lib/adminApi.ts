@@ -80,14 +80,34 @@ export interface AnalyticsDashboard {
   definitions: Record<string, string>;
 }
 
-async function adminGet<T>(path: string): Promise<T> {
+export const STAFF_ROLE_NAMES = ['ADMIN', 'MODERATOR', 'FINANCE_ADMIN'];
+
+type Query = Record<string, string | number | undefined>;
+
+async function adminRequest<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  options: { query?: Query; body?: unknown } = {},
+): Promise<{ data: T; pagination?: Pagination }> {
   const user = firebaseAuth.currentUser;
   if (!user) throw new AdminApiError(401, 'You need to be signed in.');
 
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(options.query ?? {})) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  }
+  const qs = params.toString();
+
   let response: Response;
   try {
-    response = await fetch(`${API_URL}/api/v1${path}`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+    response = await fetch(`${API_URL}/api/v1${path}${qs ? `?${qs}` : ''}`, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${await user.getIdToken()}`,
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
       cache: 'no-store',
     });
   } catch {
@@ -98,16 +118,141 @@ async function adminGet<T>(path: string): Promise<T> {
     const body = (await response.json().catch(() => null)) as { message?: string } | null;
     const fallback =
       response.status === 403
-        ? 'You do not have permission to view this.'
+        ? 'You do not have permission to do this.'
         : 'The server could not complete this request.';
     throw new AdminApiError(response.status, body?.message ?? fallback);
   }
 
-  const json = (await response.json()) as { data: T };
-  return json.data;
+  const json = (await response.json()) as { data: T; pagination?: Pagination };
+  return { data: json.data, pagination: json.pagination };
 }
+
+const adminGet = async <T>(path: string, query?: Query) => (await adminRequest<T>('GET', path, { query })).data;
 
 export const fetchAdminOverview = () => adminGet<AdminOverview>('/admin/overview');
 
 export const fetchAnalyticsDashboard = (range: AnalyticsRange) =>
   adminGet<AnalyticsDashboard>(`/analytics/dashboard?range=${range}`);
+
+// ---------------------------------------------------------------------------
+// Session, users, enforcement, roles, audit log
+// ---------------------------------------------------------------------------
+
+export interface Pagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AdminSession {
+  id: string;
+  roles: string[];
+  permissions: string[];
+}
+
+export type AccountStatus =
+  | 'ACTIVE'
+  | 'PENDING_VERIFICATION'
+  | 'RESTRICTED'
+  | 'SUSPENDED'
+  | 'BANNED'
+  | 'DEACTIVATED';
+
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  status: AccountStatus;
+  createdAt: string;
+  roles: string[];
+  artistProfile: { id: string; displayName: string; verificationStatus: string } | null;
+}
+
+export interface EnforcementRecord {
+  id: string;
+  action: 'WARNING' | 'RESTRICTION' | 'SUSPENSION' | 'BAN' | 'REINSTATEMENT';
+  reason: string;
+  previousStatus: AccountStatus | null;
+  newStatus: AccountStatus | null;
+  expiresAt: string | null;
+  endedAt: string | null;
+  endedReason: string | null;
+  createdAt: string;
+  actor: { id: string; firstName: string; lastName: string } | null;
+}
+
+export interface AdminUserDetail extends Omit<AdminUserRow, 'artistProfile'> {
+  avatarUrl: string | null;
+  bio: string | null;
+  location: string | null;
+  emailVerifiedAt: string | null;
+  artistProfile:
+    | (AdminUserRow['artistProfile'] & { slug: string; verifiedAt: string | null; _count: { artworks: number } })
+    | null;
+  _count: { orders: number; commissionsRequested: number; reviews: number };
+  activeMeasure: EnforcementRecord | null;
+  enforcements: EnforcementRecord[];
+  reportsAgainst: { id: string; reason: string; status: string; createdAt: string }[];
+  recentAudit: {
+    id: string;
+    action: string;
+    reason: string | null;
+    createdAt: string;
+    user: { id: string; firstName: string; lastName: string } | null;
+  }[];
+}
+
+export interface ListUsersParams {
+  page?: number;
+  search?: string;
+  status?: string;
+  role?: string;
+  sort?: 'createdAt' | 'email' | 'lastName';
+  dir?: 'asc' | 'desc';
+}
+
+export type EnforcementActionRequest = 'WARNING' | 'RESTRICT' | 'SUSPEND' | 'BAN' | 'REINSTATE';
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  reason: string | null;
+  requestId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  user: { id: string; firstName: string; lastName: string; email: string } | null;
+}
+
+export interface ListAuditParams {
+  page?: number;
+  action?: string;
+  entityType?: string;
+  entityId?: string;
+  actorId?: string;
+  from?: string;
+  to?: string;
+}
+
+export const fetchAdminSession = () => adminGet<AdminSession>('/admin/session');
+
+export const fetchAdminUsers = (params: ListUsersParams) =>
+  adminRequest<AdminUserRow[]>('GET', '/admin/users', { query: { ...params, pageSize: 20 } });
+
+export const fetchAdminUser = (id: string) => adminGet<AdminUserDetail>(`/admin/users/${id}`);
+
+export const enforceUser = (
+  id: string,
+  body: { action: EnforcementActionRequest; reason: string; expiresAt?: string },
+) => adminRequest<{ status: AccountStatus }>('POST', `/admin/users/${id}/enforcement`, { body });
+
+export const changeUserRole = (
+  id: string,
+  body: { role: string; operation: 'GRANT' | 'REVOKE'; reason: string },
+) => adminRequest<{ roles: string[] }>('POST', `/admin/users/${id}/roles`, { body });
+
+export const fetchAuditLogs = (params: ListAuditParams) =>
+  adminRequest<AuditEntry[]>('GET', '/admin/audit-logs', { query: { ...params, pageSize: 25 } });

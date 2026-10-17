@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Route } from 'next';
 import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
+import { AdminSessionProvider, useAdminSession } from '../../components/admin/AdminSessionContext';
+import { STAFF_ROLE_NAMES } from '../../lib/adminApi';
 
 /*
   Explainer: one config drives both the desktop sidebar and the mobile
@@ -17,6 +19,8 @@ import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
 interface NavItem {
   label: string;
   href?: string;
+  /** Permission needed to see this item (checked again by the API). */
+  permission: string;
 }
 interface NavGroup {
   heading: string;
@@ -27,30 +31,34 @@ const ADMIN_NAV: NavGroup[] = [
   {
     heading: 'Workspace',
     items: [
-      { label: 'Overview', href: '/admin' },
-      { label: 'Analytics', href: '/admin/analytics' },
+      { label: 'Overview', href: '/admin', permission: 'admin.access' },
+      { label: 'Analytics', href: '/admin/analytics', permission: 'finance.view' },
     ],
   },
   {
     heading: 'Marketplace',
     items: [
-      { label: 'Users & Artists' },
-      { label: 'Artwork' },
-      { label: 'Orders & Payments' },
-      { label: 'Commissions' },
+      { label: 'Users', href: '/admin/users', permission: 'users.view' },
+      { label: 'Artist Verification', permission: 'artists.review' },
+      { label: 'Artwork Moderation', permission: 'artworks.moderate' },
+      { label: 'Orders & Payments', permission: 'finance.view' },
+      { label: 'Commissions', permission: 'users.view' },
     ],
   },
   {
     heading: 'Trust & Support',
     items: [
-      { label: 'Reports & Moderation' },
-      { label: 'Reviews', href: '/admin/reviews' },
-      { label: 'Contact Messages', href: '/admin/messages' },
+      { label: 'Reports & Investigations', permission: 'reports.manage' },
+      { label: 'Reviews', href: '/admin/reviews', permission: 'reviews.moderate' },
+      { label: 'Contact Messages', href: '/admin/messages', permission: 'support.manage' },
     ],
   },
   {
     heading: 'Platform',
-    items: [{ label: 'Financial Reports' }, { label: 'Audit Logs' }, { label: 'Settings' }],
+    items: [
+      { label: 'Financial Reports', permission: 'finance.view' },
+      { label: 'Audit Logs', href: '/admin/audit-logs', permission: 'audit.view' },
+    ],
   },
 ];
 
@@ -60,9 +68,15 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 function NavList({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const { can } = useAdminSession();
+  const groups = ADMIN_NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => can(item.permission)),
+  })).filter((group) => group.items.length > 0);
+
   return (
     <nav aria-label="Admin" className="flex flex-col gap-6">
-      {ADMIN_NAV.map((group) => (
+      {groups.map((group) => (
         <div key={group.heading}>
           <p className="px-3 text-[10px] font-medium uppercase tracking-[0.2em] text-muted">
             {group.heading}
@@ -118,7 +132,7 @@ function AdminChrome({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-background">
       <div className="fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-border/10 bg-surface px-gutter py-4 lg:hidden">
         <div>
-          <p className="font-display text-base text-foreground">FineArts</p>
+          <p className="font-display text-base text-foreground">Fine Arts</p>
           <p className="text-[10px] uppercase tracking-[0.2em] text-muted">Admin</p>
         </div>
         <button
@@ -146,7 +160,7 @@ function AdminChrome({ children }: { children: ReactNode }) {
 
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-border/10 bg-surface px-4 py-8 lg:flex">
         <div className="px-3">
-          <p className="font-display text-lg text-foreground">FineArts</p>
+          <p className="font-display text-lg text-foreground">Fine Arts</p>
           <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted">Admin</p>
         </div>
         <div className="mt-10">
@@ -172,8 +186,10 @@ function AdminChrome({ children }: { children: ReactNode }) {
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense fallback={null}>
-      <ProtectedRoute allowRoles={['ADMIN']}>
-        <AdminChrome>{children}</AdminChrome>
+      <ProtectedRoute allowRoles={STAFF_ROLE_NAMES}>
+        <AdminSessionProvider>
+          <AdminChrome>{children}</AdminChrome>
+        </AdminSessionProvider>
       </ProtectedRoute>
     </Suspense>
   );

@@ -16,13 +16,13 @@ export async function generateMetadata({ params }: ArtworkPageProps): Promise<Me
   const { slug } = await params;
   const artwork = await fetchArtworkBySlug(slug);
 
-  if (!artwork) return { title: 'Artwork Not Found — FineArts' };
+  if (!artwork) return { title: 'Artwork Not Found — Fine Arts' };
 
   const artistName = artwork.artist.name;
   const primaryImage = artwork.images.find((img) => img.isPrimary)?.url ?? artwork.images[0]?.url;
 
   return {
-    title: `${artwork.title} by ${artistName} — FineArts`,
+    title: `${artwork.title} by ${artistName} — Fine Arts`,
     description: artwork.description ?? `${artwork.title}, an original work by ${artistName}.`,
     openGraph: {
       title: artwork.title,
