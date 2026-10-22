@@ -18,8 +18,21 @@ import {
   listAuditLogsHandler,
   listUsersHandler,
 } from '../controllers/adminUserController.js';
+import {
+  cancelRequestHandler,
+  createRequestHandler,
+  decisionHandler,
+  queueHandler,
+  reviewDetailHandler,
+} from '../controllers/artistVerificationController.js';
 import { requirePermission } from '../middleware/requirePermission.js';
 import { validateQuery } from '../middleware/validateQuery.js';
+import {
+  cancelRequestSchema,
+  createInfoRequestSchema,
+  decisionSchema,
+  queueQuerySchema,
+} from '../validation/artistVerification.js';
 import {
   auditLogQuerySchema,
   enforcementBodySchema,
@@ -72,4 +85,35 @@ adminRouter.patch(
   requirePermission('support.manage'),
   validateBody(updateContactMessageStatusSchema),
   asyncHandler(updateContactMessageStatus),
+);
+
+// Artist verification — every route needs `artists.review`.
+adminRouter.get(
+  '/artist-verification',
+  requirePermission('artists.review'),
+  validateQuery(queueQuerySchema),
+  asyncHandler(queueHandler),
+);
+adminRouter.get(
+  '/artist-verification/:artistId',
+  requirePermission('artists.review'),
+  asyncHandler(reviewDetailHandler),
+);
+adminRouter.post(
+  '/artist-verification/:artistId/requests',
+  requirePermission('artists.review'),
+  validateBody(createInfoRequestSchema),
+  asyncHandler(createRequestHandler),
+);
+adminRouter.post(
+  '/artist-verification/requests/:requestId/cancel',
+  requirePermission('artists.review'),
+  validateBody(cancelRequestSchema),
+  asyncHandler(cancelRequestHandler),
+);
+adminRouter.post(
+  '/artist-verification/:artistId/decision',
+  requirePermission('artists.review'),
+  validateBody(decisionSchema),
+  asyncHandler(decisionHandler),
 );

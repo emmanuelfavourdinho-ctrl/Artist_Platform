@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
-import { prisma } from '../config/db.js';
+import { prisma } from '../lib/prisma.js';
+import { assertArtistVerified } from '../services/artistEligibility.js';
 import { HttpError } from '../lib/httpError.js';
 import {
   createCommissionSchema,
@@ -50,6 +51,9 @@ export async function createCommission(req: Request, res: Response, next: NextFu
     const input = createCommissionSchema.parse(req.body);
     const artist = await prisma.artistProfile.findUnique({ where: { id: input.artistId } });
     if (!artist) throw new HttpError(404, 'Artist not found', { code: 'ARTIST_NOT_FOUND' });
+    // New commission engagements are reserved for verified artists. Existing
+    // commissions (status updates, proposals) are untouched by this check.
+    assertArtistVerified(artist, 'This artist is not yet accepting commissions');
 
     const commission = await prisma.commissionRequest.create({
       data: {

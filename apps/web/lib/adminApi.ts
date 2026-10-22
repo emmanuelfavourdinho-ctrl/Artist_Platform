@@ -5,10 +5,19 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 // Carries the HTTP status so the UI can tell "you are not allowed" (403)
 // apart from "the server is down" (5xx) instead of showing one vague
 // message for everything.
+export interface FieldIssue {
+  path: string;
+  message: string;
+}
+
 export class AdminApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /** Machine-readable error code from the API (e.g. REQUEST_ALREADY_OPEN). */
+    public readonly code?: string,
+    /** Per-field validation problems, when the API sent them. */
+    public readonly issues: FieldIssue[] = [],
   ) {
     super(message);
     this.name = 'AdminApiError';
@@ -82,10 +91,12 @@ export interface AnalyticsDashboard {
 
 export const STAFF_ROLE_NAMES = ['ADMIN', 'MODERATOR', 'FINANCE_ADMIN'];
 
-type Query = Record<string, string | number | undefined>;
+export type Query = Record<string, string | number | undefined>;
 
-async function adminRequest<T>(
-  method: 'GET' | 'POST',
+// Authenticated JSON request helper. Used by the admin console and by the
+// artist studio's verification screens — the name is historical.
+export async function adminRequest<T>(
+  method: 'GET' | 'POST' | 'PATCH',
   path: string,
   options: { query?: Query; body?: unknown } = {},
 ): Promise<{ data: T; pagination?: Pagination }> {
@@ -115,12 +126,21 @@ async function adminRequest<T>(
   }
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    const body = (await response.json().catch(() => null)) as {
+      message?: string;
+      code?: string;
+      details?: unknown;
+    } | null;
     const fallback =
       response.status === 403
         ? 'You do not have permission to do this.'
         : 'The server could not complete this request.';
-    throw new AdminApiError(response.status, body?.message ?? fallback);
+    const issues = Array.isArray(body?.details)
+      ? (body.details as FieldIssue[]).filter(
+          (d) => d && typeof d.path === 'string' && typeof d.message === 'string',
+        )
+      : [];
+    throw new AdminApiError(response.status, body?.message ?? fallback, body?.code, issues);
   }
 
   const json = (await response.json()) as { data: T; pagination?: Pagination };

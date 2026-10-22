@@ -57,12 +57,20 @@ export function ArtistHeader({ artist }: { artist: ArtistProfileData }) {
             conversation. See ProtectedRoute for how the artist selection
             survives an auth detour. */}
         <div className="pb-2 sm:pb-0">
-          <Link
-            href={commissionHref}
-            className="inline-flex items-center justify-center whitespace-nowrap bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:opacity-90"
-          >
-            Request a Commission
-          </Link>
+          {artist.verified ? (
+            <Link
+              href={commissionHref}
+              className="inline-flex items-center justify-center whitespace-nowrap bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:opacity-90"
+            >
+              Request a Commission
+            </Link>
+          ) : (
+            // The API refuses commission requests for unverified artists, so
+            // the page says so instead of offering an action that will fail.
+            <span className="inline-flex items-center whitespace-nowrap border border-border/20 px-6 py-3 text-sm text-muted">
+              Not yet accepting commissions
+            </span>
+          )}
         </div>
       </div>
 

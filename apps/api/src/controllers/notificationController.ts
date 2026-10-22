@@ -1,49 +1,66 @@
-import type { Request, Response, NextFunction } from 'express';
-import { prisma } from '../config/db.js';
+import type { NextFunction, Request, Response } from 'express';
+import { HttpError } from '../lib/httpError.js';
+import { prisma } from '../lib/prisma.js';
+import { isSafeLink } from '../services/notificationService.js';
+import type { MarkNotificationsReadInput } from '../validation/artistVerification.js';
 
+function userId(req: Request): string {
+  if (!req.user) throw new HttpError(401, 'Login required', { code: 'AUTH_REQUIRED' });
+  return req.user.id;
+}
+
+/*
+  Explainer: the response contract the UI relies on. The task link is read
+  out of data.link (where notificationService stores it) and returned as a
+  top-level `link`, but only if it is a safe app-relative path — a bad
+  value in the database can never become a navigable off-site URL.
+  `read` is derived from readAt so the UI has one consistent field.
+*/
 export async function getNotifications(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
-
-    const [notifications, unreadCount] = await Promise.all([
+    const id = userId(req);
+    const [rows, unreadCount] = await Promise.all([
+      // Always scoped to the authenticated recipient.
       prisma.notification.findMany({
-        where: { userId },
+        where: { userId: id },
         orderBy: { createdAt: 'desc' },
-        take: 20,
+        take: 30,
+        select: { id: true, type: true, title: true, message: true, data: true, readAt: true, createdAt: true },
       }),
-      prisma.notification.count({
-        where: { userId, readAt: null },
-      }),
+      prisma.notification.count({ where: { userId: id, readAt: null } }),
     ]);
 
-    res.json({
-      success: true,
-      data: { notifications, unreadCount },
+    const notifications = rows.map(({ data, readAt, ...rest }) => {
+      const link =
+        data && typeof data === 'object' && !Array.isArray(data) && typeof data.link === 'string'
+          ? data.link
+          : null;
+      return { ...rest, link: link && isSafeLink(link) ? link : null, read: readAt !== null };
     });
-  } catch (err) {
-    next(err);
+
+    res.json({ status: 'success', data: { notifications, unreadCount } });
+  } catch (error) {
+    next(error);
   }
 }
 
 export async function markAsRead(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
-    const { notificationIds } = req.body;
+    const id = userId(req);
+    const { notificationIds } = req.body as MarkNotificationsReadInput;
 
-    if (Array.isArray(notificationIds) && notificationIds.length > 0) {
-      await prisma.notification.updateMany({
-        where: { id: { in: notificationIds }, userId },
-        data: { readAt: new Date() },
-      });
-    } else {
-      await prisma.notification.updateMany({
-        where: { userId, readAt: null },
-        data: { readAt: new Date() },
-      });
-    }
+    // `userId` in the filter means another user's ids are silently ignored.
+    const result = await prisma.notification.updateMany({
+      where: {
+        userId: id,
+        readAt: null,
+        ...(notificationIds ? { id: { in: notificationIds } } : {}),
+      },
+      data: { readAt: new Date() },
+    });
 
-    res.json({ success: true });
-  } catch (err) {
-    next(err);
+    res.json({ status: 'success', data: { updated: result.count } });
+  } catch (error) {
+    next(error);
   }
 }

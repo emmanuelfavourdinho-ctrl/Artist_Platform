@@ -42,7 +42,14 @@ export async function createCheckoutSession(
     // Real price, real availability, straight from Postgres — never
     // from whatever the client's cart claims.
     const artworks = await prisma.artwork.findMany({
-      where: { id: { in: artworkIds }, status: 'PUBLISHED', visibility: 'PUBLIC' },
+      // An unverified seller's work is not purchasable, even if it is somehow
+      // PUBLISHED. Checked here, from trusted data, not in the cart/UI.
+      where: {
+        id: { in: artworkIds },
+        status: 'PUBLISHED',
+        visibility: 'PUBLIC',
+        artist: { is: { verificationStatus: 'VERIFIED' } },
+      },
       select: {
         id: true,
         title: true,

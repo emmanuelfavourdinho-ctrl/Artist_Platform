@@ -121,26 +121,30 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  roles                 UserRole[]
-  sessions              Session[]
-  addresses             Address[]
-  artistProfile         ArtistProfile?
-  cart                  Cart?
-  orders                Order[]
-  favorites             Favorite[]
-  reviews               Review[]
-  commissionsRequested  CommissionRequest[]    @relation("BuyerCommissions")
-  notifications         Notification[]
-  moderationActions     ArtworkModeration[]    @relation("AdminModerationActions")
-  auditLogs             AuditLog[]
-  inventoryReservations InventoryReservation[]
-  conversationsAsBuyer  Conversation[]         @relation("BuyerConversations")
-  messagesSent          Message[]
-  communityPosts        CommunityPost[]        @relation("CommunityPostAuthor")
-  enforcementsReceived  UserEnforcement[]      @relation("EnforcementTarget")
-  enforcementsIssued    UserEnforcement[]      @relation("EnforcementActor")
-  reportsSubmitted      Report[]               @relation("ReportsSubmitted")
-  reportsReviewed       Report[]               @relation("ReportsReviewed")
+  roles                         UserRole[]
+  sessions                      Session[]
+  addresses                     Address[]
+  artistProfile                 ArtistProfile?
+  cart                          Cart?
+  orders                        Order[]
+  favorites                     Favorite[]
+  reviews                       Review[]
+  commissionsRequested          CommissionRequest[]          @relation("BuyerCommissions")
+  notifications                 Notification[]
+  moderationActions             ArtworkModeration[]          @relation("AdminModerationActions")
+  auditLogs                     AuditLog[]
+  inventoryReservations         InventoryReservation[]
+  conversationsAsBuyer          Conversation[]               @relation("BuyerConversations")
+  messagesSent                  Message[]
+  communityPosts                CommunityPost[]              @relation("CommunityPostAuthor")
+  enforcementsReceived          UserEnforcement[]            @relation("EnforcementTarget")
+  enforcementsIssued            UserEnforcement[]            @relation("EnforcementActor")
+  verificationRequestsIssued    VerificationInfoRequest[]    @relation("VerificationRequester")
+  verificationRequestsCancelled VerificationInfoRequest[]    @relation("VerificationCanceller")
+  verificationSubmissions       VerificationSubmission[]     @relation("VerificationSubmitter")
+  verificationDecisionsMade     ArtistVerificationDecision[] @relation("VerificationDecider")
+  reportsSubmitted              Report[]                     @relation("ReportsSubmitted")
+  reportsReviewed               Report[]                     @relation("ReportsReviewed")
 
   @@index([status])
   @@index([createdAt])
@@ -254,15 +258,17 @@ model ArtistProfile {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievements        ArtistAchievement[]
-  socialLinks         ArtistSocialLink[]
-  artworks            Artwork[]
-  orderItems          OrderItem[]
-  commissionsReceived CommissionRequest[]  @relation("ArtistCommissions")
-  conversations       Conversation[]       @relation("ArtistConversations")
-  communityPosts      CommunityPost[]      @relation("ArtistCommunityPosts")
-  commissionProposals CommissionProposal[]
+  user                  User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievements          ArtistAchievement[]
+  socialLinks           ArtistSocialLink[]
+  artworks              Artwork[]
+  orderItems            OrderItem[]
+  commissionsReceived   CommissionRequest[]          @relation("ArtistCommissions")
+  conversations         Conversation[]               @relation("ArtistConversations")
+  communityPosts        CommunityPost[]              @relation("ArtistCommunityPosts")
+  commissionProposals   CommissionProposal[]
+  verificationRequests  VerificationInfoRequest[]
+  verificationDecisions ArtistVerificationDecision[]
 
   @@index([slug])
   @@index([verificationStatus])
@@ -867,6 +873,9 @@ enum AuditAction {
   USER_STATUS_CHANGED
   USER_WARNED
   REPORT_REVIEWED
+  VERIFICATION_REQUEST_CREATED
+  VERIFICATION_RESPONSE_SUBMITTED
+  VERIFICATION_REQUEST_CANCELLED
 }
 
 model AuditLog {
@@ -1108,4 +1117,82 @@ model UserEnforcement {
   @@index([userId, createdAt])
   @@index([userId, endedAt])
   @@index([expiresAt])
+}
+
+// ===========================================================================
+// DOMAIN 19 — ARTIST VERIFICATION WORKFLOW
+// ===========================================================================
+//
+// ArtistProfile.verificationStatus stays the single authoritative answer to
+// "is this artist verified?". Nothing below changes it except an authorised
+// final decision (ArtistVerificationDecision). The information-request
+// lifecycle is deliberately SEPARATE from that status: asking an artist for
+// more information, or receiving their answer, never verifies them.
+
+enum VerificationRequestStatus {
+  AWAITING_ARTIST_INPUT
+  AWAITING_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+// One row per request ROUND. A new round never edits an old one: rounds are
+// numbered per artist and `fields` is a snapshot, written once at creation,
+// of exactly what was asked (type, label, instructions, required) — so
+// history stays accurate even if the field catalogue changes later.
+model VerificationInfoRequest {
+  id                 String                    @id @default(uuid())
+  artistId           String
+  round              Int
+  status             VerificationRequestStatus @default(AWAITING_ARTIST_INPUT)
+  message            String?
+  fields             Json
+  requestedById      String?
+  createdAt          DateTime                  @default(now())
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?
+
+  artist      ArtistProfile           @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  requestedBy User?                   @relation("VerificationRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  cancelledBy User?                   @relation("VerificationCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  submission  VerificationSubmission?
+  decisions   ArtistVerificationDecision[]
+
+  @@unique([artistId, round])
+  @@index([artistId, status])
+  @@index([status, createdAt])
+}
+
+// The artist's answer to one round. At most one per round (requestId is
+// unique), so a repeat submission is rejected by the database itself, not
+// only by application checks.
+model VerificationSubmission {
+  id            String   @id @default(uuid())
+  requestId     String   @unique
+  submittedById String?
+  responses     Json
+  submittedAt   DateTime @default(now())
+
+  request     VerificationInfoRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  submittedBy User?                   @relation("VerificationSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+}
+
+// Immutable record of a final decision. `requestId` points at the round that
+// was under review when the decision was made (if any).
+model ArtistVerificationDecision {
+  id          String             @id @default(uuid())
+  artistId    String
+  decision    VerificationStatus
+  reason      String?
+  requestId   String?
+  decidedById String?
+  createdAt   DateTime           @default(now())
+
+  artist    ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  request   VerificationInfoRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  decidedBy User?         @relation("VerificationDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([artistId, createdAt])
 }

@@ -54,7 +54,7 @@ function OverviewContent() {
         {
           title: 'Artists pending verification',
           count: data.queues.pendingArtistVerification,
-          note: 'Verification tools are not built yet',
+          href: '/admin/artist-verification',
         },
         {
           title: 'Open reports',

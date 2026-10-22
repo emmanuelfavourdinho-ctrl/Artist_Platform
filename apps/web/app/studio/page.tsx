@@ -9,6 +9,7 @@ import {
 } from '../../components/ui/CloudinaryImageUpload';
 import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
 import { useAuth } from '../../context/AuthContext';
+import { VerificationTaskBanner } from '../../components/studio/VerificationTaskBanner';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
 const API_BASE_URL = API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
@@ -106,6 +107,8 @@ function StudioContent() {
           </button>
         </div>
       </header>
+
+      <VerificationTaskBanner />
 
       {/* Catalog Table */}
       {loading ? (
