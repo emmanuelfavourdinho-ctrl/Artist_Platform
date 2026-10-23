@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
@@ -20,8 +19,13 @@ function initials(firstName: string, lastName: string): string {
   return `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase();
 }
 
-export function ModerationQueueItem({ review }: { review: PendingReview }) {
-  const router = useRouter();
+export function ModerationQueueItem({
+  review,
+  onModerated,
+}: {
+  review: PendingReview;
+  onModerated: (stale?: boolean) => void;
+}) {
   const { firebaseUser } = useAuth();
   const [pending, setPending] = useState<'approve' | 'reject' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,12 +46,18 @@ export function ModerationQueueItem({ review }: { review: PendingReview }) {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.message ?? 'Something went wrong.');
+        const data = (await res.json().catch(() => null)) as { message?: string } | null;
+        if (res.status === 409) {
+          onModerated(true);
+          return;
+        }
+        setError(data?.message ?? `Could not ${action} this review (request failed: ${res.status}).`);
         return;
       }
 
-      router.refresh();
+      onModerated();
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.');
     } finally {
       setPending(null);
     }

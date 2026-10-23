@@ -68,13 +68,30 @@ export async function moderateReview(req: Request, res: Response) {
   if (!review) {
     throw new HttpError(404, 'Review not found', { code: 'REVIEW_NOT_FOUND' });
   }
+  if (review.status !== 'PENDING') {
+    throw new HttpError(409, 'Review has already been moderated', {
+      code: 'REVIEW_ALREADY_MODERATED',
+    });
+  }
 
   const status = ACTION_TO_STATUS[action];
   const auditAction = ACTION_TO_AUDIT_ACTION[action];
 
-  const [updated] = await prisma.$transaction([
-    prisma.review.update({ where: { id }, data: { status } }),
-    prisma.auditLog.create({
+  const updated = await prisma.$transaction(async (tx) => {
+    // The earlier read gives an explicit 404/stale response, but only this
+    // conditional write arbitrates competing requests. PostgreSQL rechecks
+    // the predicate after waiting for a concurrent row update.
+    const transition = await tx.review.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status },
+    });
+    if (transition.count === 0) {
+      throw new HttpError(409, 'Review has already been moderated', {
+        code: 'REVIEW_ALREADY_MODERATED',
+      });
+    }
+
+    await tx.auditLog.create({
       data: {
         userId: adminId,
         action: auditAction,
@@ -82,8 +99,10 @@ export async function moderateReview(req: Request, res: Response) {
         entityId: id,
         metadata: reason ? { reason } : undefined,
       },
-    }),
-  ]);
+    });
+
+    return { id, status };
+  });
 
   res.json({
     status: 'success',
