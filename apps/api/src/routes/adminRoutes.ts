@@ -8,7 +8,10 @@ import {
   listContactMessages,
   updateContactMessageStatus,
 } from '../controllers/contactController.js';
-import { updateContactMessageStatusSchema } from '../validation/contact.js';
+import {
+  listContactMessagesQuerySchema,
+  updateContactMessageStatusSchema,
+} from '../validation/contact.js';
 import { getOverview } from '../controllers/adminOverviewController.js';
 import {
   changeRoleHandler,
@@ -79,7 +82,12 @@ adminRouter.patch(
   validateBody(moderateReviewSchema),
   asyncHandler(moderateReview),
 );
-adminRouter.get('/contact-messages', requirePermission('support.manage'), asyncHandler(listContactMessages));
+adminRouter.get(
+  '/contact-messages',
+  requirePermission('support.manage'),
+  validateQuery(listContactMessagesQuerySchema),
+  asyncHandler(listContactMessages),
+);
 adminRouter.patch(
   '/contact-messages/:id',
   requirePermission('support.manage'),

@@ -73,6 +73,7 @@ export const auditLogQuerySchema = z.object({
       'USER_STATUS_CHANGED',
       'USER_WARNED',
       'REPORT_REVIEWED',
+      'CONTACT_MESSAGE_STATUS_CHANGED',
     ])
     .optional(),
   entityType: z.string().trim().min(1).max(50).optional(),

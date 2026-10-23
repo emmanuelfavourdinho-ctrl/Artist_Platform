@@ -1,7 +1,13 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { HttpError } from '../lib/httpError.js';
-import type { CreateContactMessageInput, RecordEmailOutcomeInput } from '../validation/contact.js';
+import { recordAudit } from '../services/auditService.js';
+import type {
+  CreateContactMessageInput,
+  ListContactMessagesQuery,
+  RecordEmailOutcomeInput,
+  UpdateContactMessageStatusInput,
+} from '../validation/contact.js';
 
 // Public — anyone can submit the contact form, no login required.
 export async function createContactMessage(
@@ -75,10 +81,32 @@ export async function listContactMessages(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const messages = await prisma.contactMessage.findMany({
-      orderBy: { createdAt: 'desc' },
+    const { page, pageSize, view } = req.query as unknown as ListContactMessagesQuery;
+    const where = view === 'ARCHIVED' ? { status: 'ARCHIVED' as const } : { status: { not: 'ARCHIVED' as const } };
+    const [messages, total, unreadTotal] = await Promise.all([
+      prisma.contactMessage.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.contactMessage.count({ where }),
+      view === 'INBOX'
+        ? prisma.contactMessage.count({ where: { status: 'UNREAD' } })
+        : Promise.resolve(0),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: messages,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+        unreadTotal,
+      },
     });
-    res.json({ status: 'success', data: messages });
   } catch (err) {
     next(err);
   }
@@ -91,19 +119,44 @@ export async function updateContactMessageStatus(
 ): Promise<void> {
   try {
     const { id } = req.params;
-    const { status } = req.body as { status: string };
+    const { status } = req.body as UpdateContactMessageStatusInput;
 
-    const message = await prisma.contactMessage.update({
-      where: { id },
-      data: { status: status as never },
+    const message = await prisma.$transaction(async (tx) => {
+      const current = await tx.contactMessage.findUnique({ where: { id } });
+      if (!current) {
+        throw new HttpError(404, 'Message not found', { code: 'NOT_FOUND' });
+      }
+
+      if (current.status === status) return current;
+
+      const transition = await tx.contactMessage.updateMany({
+        where: { id, status: current.status },
+        data: { status },
+      });
+      if (transition.count === 0) {
+        throw new HttpError(409, 'Message status changed before this update completed', {
+          code: 'CONTACT_MESSAGE_STATUS_CONFLICT',
+        });
+      }
+
+      await recordAudit(tx, {
+        actorId: req.user!.id,
+        action: 'CONTACT_MESSAGE_STATUS_CHANGED',
+        entityType: 'ContactMessage',
+        entityId: id,
+        requestId: req.id ?? null,
+        metadata: { fromStatus: current.status, toStatus: status },
+      });
+
+      const updated = await tx.contactMessage.findUnique({ where: { id } });
+      if (!updated) {
+        throw new HttpError(404, 'Message not found', { code: 'NOT_FOUND' });
+      }
+      return updated;
     });
 
     res.json({ status: 'success', data: message });
   } catch (err) {
-    if ((err as { code?: string }).code === 'P2025') {
-      next(new HttpError(404, 'Message not found', { code: 'NOT_FOUND' }));
-      return;
-    }
     next(err);
   }
 }
