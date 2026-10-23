@@ -42,6 +42,15 @@ import {
   listUsersQuerySchema,
   staffRoleBodySchema,
 } from '../validation/adminUsers.js';
+import {
+  listArtworkQueueQuerySchema,
+  moderateArtworkSchema,
+} from '../validation/artworkModeration.js';
+import {
+  listPendingArtwork,
+  moderateArtworkDecision,
+  pendingArtworkDetail,
+} from '../controllers/adminArtworkController.js';
 
 export const adminRouter = Router();
 
@@ -81,6 +90,23 @@ adminRouter.patch(
   requirePermission('reviews.moderate'),
   validateBody(moderateReviewSchema),
   asyncHandler(moderateReview),
+);
+adminRouter.get(
+  '/artworks',
+  requirePermission('artworks.moderate'),
+  validateQuery(listArtworkQueueQuerySchema),
+  asyncHandler(listPendingArtwork),
+);
+adminRouter.get(
+  '/artworks/:id',
+  requirePermission('artworks.moderate'),
+  asyncHandler(pendingArtworkDetail),
+);
+adminRouter.patch(
+  '/artworks/:id',
+  requirePermission('artworks.moderate'),
+  validateBody(moderateArtworkSchema),
+  asyncHandler(moderateArtworkDecision),
 );
 adminRouter.get(
   '/contact-messages',

@@ -40,7 +40,7 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { label: 'Users', href: '/admin/users', permission: 'users.view' },
       { label: 'Artist Verification', href: '/admin/artist-verification', permission: 'artists.review' },
-      { label: 'Artwork Moderation', permission: 'artworks.moderate' },
+      { label: 'Artwork Moderation', href: '/admin/artworks', permission: 'artworks.moderate' },
       { label: 'Orders & Payments', permission: 'finance.view' },
       { label: 'Commissions', permission: 'users.view' },
     ],
