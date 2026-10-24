@@ -1062,10 +1062,11 @@ model Report {
   targetId    String
   reason      String
   description String?
-  status      ReportStatus     @default(PENDING)
-  reviewedBy  String?
-  reviewedAt  DateTime?
-  createdAt   DateTime         @default(now())
+  status         ReportStatus @default(PENDING)
+  resolutionNote String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
 
   reporter User  @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Restrict)
   reviewer User? @relation("ReportsReviewed", fields: [reviewedBy], references: [id], onDelete: SetNull)

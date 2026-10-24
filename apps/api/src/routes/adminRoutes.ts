@@ -51,6 +51,8 @@ import {
   moderateArtworkDecision,
   pendingArtworkDetail,
 } from '../controllers/adminArtworkController.js';
+import { decideReport, getReportDetail, listReports } from '../controllers/reportController.js';
+import { listReportsQuerySchema, updateReportSchema } from '../validation/reports.js';
 
 export const adminRouter = Router();
 
@@ -84,7 +86,11 @@ adminRouter.get(
   asyncHandler(listAuditLogsHandler),
 );
 
-adminRouter.get('/reviews', requirePermission('reviews.moderate'), asyncHandler(listPendingReviews));
+adminRouter.get(
+  '/reviews',
+  requirePermission('reviews.moderate'),
+  asyncHandler(listPendingReviews),
+);
 adminRouter.patch(
   '/reviews/:id',
   requirePermission('reviews.moderate'),
@@ -107,6 +113,19 @@ adminRouter.patch(
   requirePermission('artworks.moderate'),
   validateBody(moderateArtworkSchema),
   asyncHandler(moderateArtworkDecision),
+);
+adminRouter.get(
+  '/reports',
+  requirePermission('reports.manage'),
+  validateQuery(listReportsQuerySchema),
+  asyncHandler(listReports),
+);
+adminRouter.get('/reports/:id', requirePermission('reports.manage'), asyncHandler(getReportDetail));
+adminRouter.patch(
+  '/reports/:id',
+  requirePermission('reports.manage'),
+  validateBody(updateReportSchema),
+  asyncHandler(decideReport),
 );
 adminRouter.get(
   '/contact-messages',

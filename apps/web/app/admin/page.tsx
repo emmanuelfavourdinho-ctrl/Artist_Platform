@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
-import { EmptyBox, ErrorBox, PageHeader, SkeletonCards, StatCard } from '../../components/admin/AdminUi';
+import {
+  EmptyBox,
+  ErrorBox,
+  PageHeader,
+  SkeletonCards,
+  StatCard,
+} from '../../components/admin/AdminUi';
+import { useAdminSession } from '../../components/admin/AdminSessionContext';
 import { fetchAdminOverview, type AdminOverview } from '../../lib/adminApi';
 
 // Order states in lifecycle order, so the breakdown reads left-to-right
@@ -32,6 +39,7 @@ interface QueueRow {
 }
 
 function OverviewContent() {
+  const { can } = useAdminSession();
   const [data, setData] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,8 +57,16 @@ function OverviewContent() {
 
   const queues: QueueRow[] = data
     ? [
-        { title: 'Reviews awaiting moderation', count: data.queues.pendingReviews, href: '/admin/reviews' },
-        { title: 'Unread contact messages', count: data.queues.unreadContactMessages, href: '/admin/messages' },
+        {
+          title: 'Reviews awaiting moderation',
+          count: data.queues.pendingReviews,
+          href: '/admin/reviews',
+        },
+        {
+          title: 'Unread contact messages',
+          count: data.queues.unreadContactMessages,
+          href: '/admin/messages',
+        },
         {
           title: 'Artists pending verification',
           count: data.queues.pendingArtistVerification,
@@ -59,7 +75,7 @@ function OverviewContent() {
         {
           title: 'Open reports',
           count: data.queues.openReports,
-          note: 'Report review is not built yet',
+          href: can('reports.manage') ? '/admin/reports' : undefined,
         },
       ]
     : [];
@@ -161,8 +177,13 @@ function OverviewContent() {
             ) : (
               <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {orderStatuses.map((status) => (
-                  <div key={status} className="rounded-lg border border-border/10 bg-surface px-5 py-4">
-                    <dt className="text-xs uppercase tracking-[0.12em] text-muted">{label(status)}</dt>
+                  <div
+                    key={status}
+                    className="rounded-lg border border-border/10 bg-surface px-5 py-4"
+                  >
+                    <dt className="text-xs uppercase tracking-[0.12em] text-muted">
+                      {label(status)}
+                    </dt>
                     <dd className="mt-1 font-display text-2xl text-foreground">
                       {data.orders.byStatus[status]}
                     </dd>

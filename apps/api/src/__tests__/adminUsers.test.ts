@@ -14,7 +14,7 @@ vi.mock('../lib/prisma.js', () => {
     auditLog: { create: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     userRole: { count: vi.fn(), create: vi.fn(), delete: vi.fn() },
     role: { findUnique: vi.fn() },
-    report: { findMany: vi.fn() },
+    report: { findMany: vi.fn(), findUnique: vi.fn() },
     order: { groupBy: vi.fn() },
     payment: { groupBy: vi.fn() },
     orderItem: { groupBy: vi.fn() },
@@ -41,7 +41,10 @@ const ACTOR = '22222222-2222-4222-8222-222222222222';
 type Targets = Record<string, { status: string; roles: string[] }>;
 
 function sessionAs(roles: string[], status = 'ACTIVE', targets: Targets = {}) {
-  vi.mocked(adminAuth.verifyIdToken).mockResolvedValue({ uid: 'fb-actor', email: 'a@x.com' } as never);
+  vi.mocked(adminAuth.verifyIdToken).mockResolvedValue({
+    uid: 'fb-actor',
+    email: 'a@x.com',
+  } as never);
   vi.mocked(prisma.user.findUnique).mockImplementation((async (args: {
     where: { id?: string; firebaseUid?: string };
   }) => {
@@ -65,7 +68,12 @@ function sessionAs(roles: string[], status = 'ACTIVE', targets: Targets = {}) {
 
 const auth = (r: request.Test) => r.set('Authorization', 'Bearer t');
 const get = (p: string) => auth(request(app).get(p));
-const post = (p: string, body: unknown) => auth(request(app).post(p).send(body as object));
+const post = (p: string, body: unknown) =>
+  auth(
+    request(app)
+      .post(p)
+      .send(body as object),
+  );
 
 const GOOD_REASON = 'Repeated spam in commission requests';
 
@@ -116,7 +124,10 @@ describe('account status is actually enforced by the backend', () => {
 
   it('lifts an EXPIRED suspension on the next request and audits it as a system action', async () => {
     sessionAs(['MODERATOR'], 'SUSPENDED');
-    vi.mocked(prisma.userEnforcement.findFirst).mockResolvedValue({ id: 'e1', action: 'SUSPENSION' } as never);
+    vi.mocked(prisma.userEnforcement.findFirst).mockResolvedValue({
+      id: 'e1',
+      action: 'SUSPENSION',
+    } as never);
     const res = await get('/api/v1/admin/session');
     // Auth lifted the expired suspension and let the request through.
     expect(res.status).toBe(200);
@@ -125,7 +136,11 @@ describe('account status is actually enforced by the backend', () => {
     );
     expect(prisma.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ userId: null, action: 'USER_STATUS_CHANGED', entityId: ACTOR }),
+        data: expect.objectContaining({
+          userId: null,
+          action: 'USER_STATUS_CHANGED',
+          entityId: ACTOR,
+        }),
       }),
     );
   });
@@ -154,7 +169,15 @@ describe('admin access control', () => {
     vi.mocked(prisma.user.count).mockResolvedValue(0 as never);
     expect((await get('/api/v1/admin/users')).status).toBe(200);
     expect((await get('/api/v1/analytics/dashboard')).status).toBe(403);
-    expect((await post(`/api/v1/admin/users/${TARGET}/roles`, { role: 'MODERATOR', operation: 'GRANT', reason: GOOD_REASON })).status).toBe(403);
+    expect(
+      (
+        await post(`/api/v1/admin/users/${TARGET}/roles`, {
+          role: 'MODERATOR',
+          operation: 'GRANT',
+          reason: GOOD_REASON,
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it('keeps finance staff out of user management and the audit log', async () => {
@@ -199,7 +222,9 @@ describe('GET /admin/users', () => {
     ] as never);
     vi.mocked(prisma.user.count).mockResolvedValue(41 as never);
 
-    const res = await get('/api/v1/admin/users?status=ACTIVE&role=BUYER&search=buy&sort=email&dir=asc&page=2&pageSize=10');
+    const res = await get(
+      '/api/v1/admin/users?status=ACTIVE&role=BUYER&search=buy&sort=email&dir=asc&page=2&pageSize=10',
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.data[0].roles).toEqual(['BUYER']);
@@ -230,7 +255,8 @@ describe('GET /admin/users', () => {
     vi.mocked(prisma.auditLog.findMany).mockResolvedValue([] as never);
     const res = await get(`/api/v1/admin/users/${TARGET}`);
     expect(res.status).toBe(200);
-    const reportSelect = (vi.mocked(prisma.report.findMany).mock.calls[0]![0] as { select: object }).select;
+    const reportSelect = (vi.mocked(prisma.report.findMany).mock.calls[0]![0] as { select: object })
+      .select;
     expect(reportSelect).not.toHaveProperty('reporterId');
     expect(reportSelect).not.toHaveProperty('reporter');
   });
@@ -243,8 +269,14 @@ describe('POST /admin/users/:id/enforcement', () => {
     ['no reason', { action: 'SUSPEND' }],
     ['a too-short reason', { action: 'SUSPEND', reason: 'bad' }],
     ['an unknown action', { action: 'DELETE', reason: GOOD_REASON }],
-    ['an end date in the past', { action: 'SUSPEND', reason: GOOD_REASON, expiresAt: '2020-01-01T00:00:00Z' }],
-    ['an end date over a year away', { action: 'SUSPEND', reason: GOOD_REASON, expiresAt: '2099-01-01T00:00:00Z' }],
+    [
+      'an end date in the past',
+      { action: 'SUSPEND', reason: GOOD_REASON, expiresAt: '2020-01-01T00:00:00Z' },
+    ],
+    [
+      'an end date over a year away',
+      { action: 'SUSPEND', reason: GOOD_REASON, expiresAt: '2099-01-01T00:00:00Z' },
+    ],
   ])('rejects %s with 400 and changes nothing', async (_l, body) => {
     sessionAs(['ADMIN'], 'ACTIVE', { [TARGET]: { status: 'ACTIVE', roles: ['BUYER'] } });
     const res = await post(url, body);
@@ -282,7 +314,11 @@ describe('POST /admin/users/:id/enforcement', () => {
         entityType: 'User',
         entityId: TARGET,
         reason: GOOD_REASON,
-        metadata: expect.objectContaining({ from: 'ACTIVE', to: 'SUSPENDED', enforcement: 'SUSPENSION' }),
+        metadata: expect.objectContaining({
+          from: 'ACTIVE',
+          to: 'SUSPENDED',
+          enforcement: 'SUSPENSION',
+        }),
       }),
     });
   });
@@ -295,6 +331,34 @@ describe('POST /admin/users/:id/enforcement', () => {
     expect(res.body.code).toBe('CONCURRENT_STATUS_CHANGE');
     expect(prisma.userEnforcement.create).not.toHaveBeenCalled();
     expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('requires an associated USER report to target the enforced account', async () => {
+    const reportId = '33333333-3333-4333-8333-333333333333';
+    sessionAs(['ADMIN'], 'ACTIVE', { [TARGET]: { status: 'ACTIVE', roles: ['BUYER'] } });
+    vi.mocked(prisma.report.findUnique).mockResolvedValue({
+      targetType: 'ARTWORK',
+      targetId: 'artwork-1',
+    } as never);
+    const mismatch = await post(url, { action: 'SUSPEND', reason: GOOD_REASON, reportId });
+    expect(mismatch.status).toBe(400);
+    expect(mismatch.body.code).toBe('REPORT_TARGET_MISMATCH');
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(prisma.userEnforcement.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps a valid enforcement report association on the history record', async () => {
+    const reportId = '44444444-4444-4444-8444-444444444444';
+    sessionAs(['ADMIN'], 'ACTIVE', { [TARGET]: { status: 'ACTIVE', roles: ['BUYER'] } });
+    vi.mocked(prisma.report.findUnique).mockResolvedValue({
+      targetType: 'USER',
+      targetId: TARGET,
+    } as never);
+    const result = await post(url, { action: 'SUSPEND', reason: GOOD_REASON, reportId });
+    expect(result.status).toBe(201);
+    expect(prisma.userEnforcement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reportId, userId: TARGET }),
+    });
   });
 
   it('a warning notifies the user and audits without changing status', async () => {
@@ -312,7 +376,10 @@ describe('POST /admin/users/:id/enforcement', () => {
 
   it('blocks enforcement against yourself, administrators, and (for moderators) other staff', async () => {
     sessionAs(['ADMIN'], 'ACTIVE', { [ACTOR]: { status: 'ACTIVE', roles: ['ADMIN'] } });
-    const self = await post(`/api/v1/admin/users/${ACTOR}/enforcement`, { action: 'SUSPEND', reason: GOOD_REASON });
+    const self = await post(`/api/v1/admin/users/${ACTOR}/enforcement`, {
+      action: 'SUSPEND',
+      reason: GOOD_REASON,
+    });
     expect(self.status).toBe(400);
     expect(self.body.code).toBe('SELF_ENFORCEMENT');
 
@@ -361,7 +428,11 @@ describe('POST /admin/users/:id/enforcement', () => {
     const res = await post(url, { action: 'REINSTATE', reason: 'Appeal reviewed and accepted' });
     expect(res.status).toBe(201);
     expect(prisma.userEnforcement.updateMany).toHaveBeenCalledWith({
-      where: { userId: TARGET, endedAt: null, action: { in: ['RESTRICTION', 'SUSPENSION', 'BAN'] } },
+      where: {
+        userId: TARGET,
+        endedAt: null,
+        action: { in: ['RESTRICTION', 'SUSPENSION', 'BAN'] },
+      },
       data: expect.objectContaining({ endedReason: 'REINSTATED' }),
     });
   });
@@ -373,7 +444,11 @@ describe('POST /admin/users/:id/roles — privilege escalation guards', () => {
 
   it('never lets someone change their own roles', async () => {
     sessionAs(['ADMIN'], 'ACTIVE', { [ACTOR]: { status: 'ACTIVE', roles: ['ADMIN'] } });
-    const res = await post(`/api/v1/admin/users/${ACTOR}/roles`, { role: 'FINANCE_ADMIN', operation: 'GRANT', reason: GOOD_REASON });
+    const res = await post(`/api/v1/admin/users/${ACTOR}/roles`, {
+      role: 'FINANCE_ADMIN',
+      operation: 'GRANT',
+      reason: GOOD_REASON,
+    });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('SELF_ROLE_CHANGE');
   });
@@ -406,12 +481,19 @@ describe('POST /admin/users/:id/roles — privilege escalation guards', () => {
     const res = await post(url, body);
     expect(res.status).toBe(200);
     expect(res.body.data.roles).toEqual(['BUYER', 'MODERATOR']);
-    expect(prisma.userRole.create).toHaveBeenCalledWith({ data: { userId: TARGET, roleId: 'role-mod' } });
+    expect(prisma.userRole.create).toHaveBeenCalledWith({
+      data: { userId: TARGET, roleId: 'role-mod' },
+    });
     expect(prisma.auditLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         action: 'USER_ROLE_UPDATED',
         reason: GOOD_REASON,
-        metadata: { operation: 'GRANT', role: 'MODERATOR', before: ['BUYER'], after: ['BUYER', 'MODERATOR'] },
+        metadata: {
+          operation: 'GRANT',
+          role: 'MODERATOR',
+          before: ['BUYER'],
+          after: ['BUYER', 'MODERATOR'],
+        },
       }),
     });
   });
@@ -431,11 +513,20 @@ describe('GET /admin/audit-logs', () => {
 
     vi.mocked(prisma.auditLog.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.auditLog.count).mockResolvedValue(0 as never);
-    const res = await get(`/api/v1/admin/audit-logs?action=USER_STATUS_CHANGED&entityType=User&entityId=${TARGET}&actorId=${ACTOR}&from=2026-01-01`);
+    const res = await get(
+      `/api/v1/admin/audit-logs?action=USER_STATUS_CHANGED&entityType=User&entityId=${TARGET}&actorId=${ACTOR}&from=2026-01-01`,
+    );
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([]);
-    const where = (vi.mocked(prisma.auditLog.findMany).mock.calls[0]![0] as { where: Record<string, unknown> }).where;
-    expect(where).toMatchObject({ action: 'USER_STATUS_CHANGED', entityType: 'User', entityId: TARGET, userId: ACTOR });
+    const where = (
+      vi.mocked(prisma.auditLog.findMany).mock.calls[0]![0] as { where: Record<string, unknown> }
+    ).where;
+    expect(where).toMatchObject({
+      action: 'USER_STATUS_CHANGED',
+      entityType: 'User',
+      entityId: TARGET,
+      userId: ACTOR,
+    });
     expect(where.createdAt).toEqual({ gte: expect.any(Date) });
   });
 

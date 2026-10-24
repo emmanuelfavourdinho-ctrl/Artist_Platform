@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ArtworkGallery } from '../../../components/artwork/ArtworkGallery';
@@ -79,6 +80,14 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
 
           <div className="lg:col-span-5">
             <ArtworkInfoPanel artwork={artwork} />
+            <p className="mt-4 text-right text-xs">
+              <Link
+                className="text-slate-500 underline underline-offset-4 hover:text-accent"
+                href={`/report-issue?targetType=ARTWORK&targetSlug=${encodeURIComponent(artwork.slug)}&targetName=${encodeURIComponent(artwork.title)}`}
+              >
+                Report this artwork
+              </Link>
+            </p>
           </div>
         </div>
 

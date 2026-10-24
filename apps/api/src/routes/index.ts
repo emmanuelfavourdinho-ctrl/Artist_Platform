@@ -17,6 +17,7 @@ import orderRouter from './orderRoutes.js';
 import { contactRouter } from './contactRoutes.js';
 import analyticsRouter from './analyticsRoutes.js';
 import notificationRouter from './notificationRoutes.js';
+import { reportRouter } from './reportRoutes.js';
 
 const router = Router();
 router.use('/health', healthRouter);
@@ -37,5 +38,6 @@ router.use('/orders', orderRouter);
 router.use('/contact', contactRouter);
 router.use('/analytics', analyticsRouter);
 router.use('/notifications', notificationRouter);
+router.use('/reports', reportRouter);
 
 export { router };

@@ -27,7 +27,7 @@ export async function getAdminOverview() {
     prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
     prisma.review.count({ where: { status: 'PENDING' } }),
     prisma.contactMessage.count({ where: { status: 'UNREAD' } }),
-    prisma.report.count({ where: { status: 'PENDING' } }),
+    prisma.report.count({ where: { status: { in: ['PENDING', 'REVIEWING'] } } }),
   ]);
 
   const orderStatusCounts = Object.fromEntries(

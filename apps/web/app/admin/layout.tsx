@@ -39,7 +39,11 @@ const ADMIN_NAV: NavGroup[] = [
     heading: 'Marketplace',
     items: [
       { label: 'Users', href: '/admin/users', permission: 'users.view' },
-      { label: 'Artist Verification', href: '/admin/artist-verification', permission: 'artists.review' },
+      {
+        label: 'Artist Verification',
+        href: '/admin/artist-verification',
+        permission: 'artists.review',
+      },
       { label: 'Artwork Moderation', href: '/admin/artworks', permission: 'artworks.moderate' },
       { label: 'Orders & Payments', permission: 'finance.view' },
       { label: 'Commissions', permission: 'users.view' },
@@ -48,7 +52,7 @@ const ADMIN_NAV: NavGroup[] = [
   {
     heading: 'Trust & Support',
     items: [
-      { label: 'Reports & Investigations', permission: 'reports.manage' },
+      { label: 'Reports & Investigations', href: '/admin/reports', permission: 'reports.manage' },
       { label: 'Reviews', href: '/admin/reviews', permission: 'reviews.moderate' },
       { label: 'Contact Messages', href: '/admin/messages', permission: 'support.manage' },
     ],
@@ -152,7 +156,10 @@ function AdminChrome({ children }: { children: ReactNode }) {
           className="fixed inset-0 top-[65px] z-30 overflow-y-auto bg-background px-gutter py-8 lg:hidden"
         >
           <NavList pathname={pathname} onNavigate={() => setDrawerOpen(false)} />
-          <Link href="/" className="mt-8 block text-xs text-muted transition-colors hover:text-accent">
+          <Link
+            href="/"
+            className="mt-8 block text-xs text-muted transition-colors hover:text-accent"
+          >
             ← Back to site
           </Link>
         </div>

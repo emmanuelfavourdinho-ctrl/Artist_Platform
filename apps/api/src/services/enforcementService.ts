@@ -64,7 +64,7 @@ export async function applyEnforcement(input: ApplyEnforcementInput) {
       code: 'SELF_ENFORCEMENT',
     });
   }
-  if ((action === 'BAN') && !hasPermission(actor.roles, 'users.ban')) {
+  if (action === 'BAN' && !hasPermission(actor.roles, 'users.ban')) {
     throw new HttpError(403, 'Banning requires additional permission', {
       code: 'PERMISSION_DENIED',
     });
@@ -76,6 +76,21 @@ export async function applyEnforcement(input: ApplyEnforcementInput) {
   }
 
   return prisma.$transaction(async (tx) => {
+    if (input.reportId) {
+      const report = await tx.report.findUnique({
+        where: { id: input.reportId },
+        select: { targetType: true, targetId: true },
+      });
+      if (!report) {
+        throw new HttpError(404, 'Report not found', { code: 'REPORT_NOT_FOUND' });
+      }
+      if (report.targetType !== 'USER' || report.targetId !== targetId) {
+        throw new HttpError(400, 'Report does not concern this user', {
+          code: 'REPORT_TARGET_MISMATCH',
+        });
+      }
+    }
+
     const target = await tx.user.findUnique({
       where: { id: targetId },
       select: { id: true, status: true, roles: { select: { role: { select: { name: true } } } } },
@@ -87,7 +102,10 @@ export async function applyEnforcement(input: ApplyEnforcementInput) {
     // lock out the people who can reverse a mistake, and a moderator cannot
     // act against colleagues. Role changes (and, for ADMIN, any manual
     // intervention) go through the audited role endpoint / operations.
-    if (targetRoles.includes('ADMIN') || (isStaff(targetRoles) && !hasPermission(actor.roles, 'roles.manage'))) {
+    if (
+      targetRoles.includes('ADMIN') ||
+      (isStaff(targetRoles) && !hasPermission(actor.roles, 'roles.manage'))
+    ) {
       throw new HttpError(403, 'This account is protected from enforcement actions', {
         code: 'PROTECTED_ACCOUNT',
       });
@@ -97,7 +115,11 @@ export async function applyEnforcement(input: ApplyEnforcementInput) {
         code: 'ACCOUNT_DEACTIVATED',
       });
     }
-    if (action === 'REINSTATE' && target.status === 'BANNED' && !hasPermission(actor.roles, 'users.ban')) {
+    if (
+      action === 'REINSTATE' &&
+      target.status === 'BANNED' &&
+      !hasPermission(actor.roles, 'users.ban')
+    ) {
       throw new HttpError(403, 'Reinstating a banned account requires additional permission', {
         code: 'PERMISSION_DENIED',
       });
@@ -117,9 +139,13 @@ export async function applyEnforcement(input: ApplyEnforcementInput) {
     } else {
       const rule = TRANSITIONS[action];
       if (!rule.from.includes(previousStatus)) {
-        throw new HttpError(409, `Cannot ${action.toLowerCase()} an account that is ${previousStatus}`, {
-          code: 'INVALID_STATUS_TRANSITION',
-        });
+        throw new HttpError(
+          409,
+          `Cannot ${action.toLowerCase()} an account that is ${previousStatus}`,
+          {
+            code: 'INVALID_STATUS_TRANSITION',
+          },
+        );
       }
       newStatus = rule.to;
 
@@ -131,9 +157,13 @@ export async function applyEnforcement(input: ApplyEnforcementInput) {
         data: { status: newStatus },
       });
       if (updated.count !== 1) {
-        throw new HttpError(409, 'This account was changed by someone else. Reload and try again.', {
-          code: 'CONCURRENT_STATUS_CHANGE',
-        });
+        throw new HttpError(
+          409,
+          'This account was changed by someone else. Reload and try again.',
+          {
+            code: 'CONCURRENT_STATUS_CHANGE',
+          },
+        );
       }
 
       // The previous measure (if any) is over: replaced or lifted.
@@ -237,7 +267,12 @@ export async function reinstateIfExpired(userId: string, now: Date = new Date())
       entityType: 'User',
       entityId: userId,
       reason,
-      metadata: { enforcement: 'REINSTATEMENT', enforcementId: record.id, automatic: true, to: 'ACTIVE' },
+      metadata: {
+        enforcement: 'REINSTATEMENT',
+        enforcementId: record.id,
+        automatic: true,
+        to: 'ACTIVE',
+      },
     });
     return true;
   });

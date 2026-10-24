@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ArtistHeader } from '../../../components/artist/ArtistHeader';
@@ -31,6 +32,14 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
   return (
     <main className="mx-auto max-w-content px-gutter py-16 sm:py-24">
       <ArtistHeader artist={artist} />
+      <p className="mt-4 text-right text-xs">
+        <Link
+          className="text-muted underline underline-offset-4 hover:text-accent"
+          href={`/report-issue?targetType=USER&targetSlug=${encodeURIComponent(artist.slug)}&targetName=${encodeURIComponent(artist.name)}`}
+        >
+          Report this artist
+        </Link>
+      </p>
 
       <section className="mt-16">
         <h2 className="font-display text-2xl text-foreground">Works by {artist.name}</h2>

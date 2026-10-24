@@ -1,7 +1,9 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-dotenv.config();
+// Tests may point dotenv at an isolated temporary path so importing the app
+// never reads a developer's real `.env` file.
+dotenv.config({ path: process.env.DOTENV_CONFIG_PATH ?? '.env' });
 
 /*
   Explainer: JWT_SECRET is the "master key" our server uses to sign
@@ -40,17 +42,26 @@ const envSchema = z.object({
   API_URL: z.string().url().optional(),
   CORS_ORIGIN: z.string().optional(),
   JWT_SECRET: isTestEnvironment
-    ? z.string().min(32, 'JWT_SECRET must be at least 32 characters long').default('test-jwt-secret-for-local-development-12345')
+    ? z
+        .string()
+        .min(32, 'JWT_SECRET must be at least 32 characters long')
+        .default('test-jwt-secret-for-local-development-12345')
     : z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
   COOKIE_SECRET: isTestEnvironment
-    ? z.string().min(32, 'COOKIE_SECRET must be at least 32 characters long').default('test-cookie-secret-for-local-development-12345')
+    ? z
+        .string()
+        .min(32, 'COOKIE_SECRET must be at least 32 characters long')
+        .default('test-cookie-secret-for-local-development-12345')
     : z.string().min(32, 'COOKIE_SECRET must be at least 32 characters long'),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
 
   FIREBASE_SERVICE_ACCOUNT_BASE64: isTestEnvironment
-    ? z.string().min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required').default('eyJ0ZW1wbGF0ZSI6InRlc3QifQ==')
+    ? z
+        .string()
+        .min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required')
+        .default('eyJ0ZW1wbGF0ZSI6InRlc3QifQ==')
     : z.string().min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required'),
 
   // Set TRUST_PROXY explicitly to override the production-only default
