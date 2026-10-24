@@ -18,6 +18,7 @@ vi.mock('../lib/prisma.js', () => {
     auditLog: { create: vi.fn() },
     notification: { create: vi.fn(), findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
     artwork: { findMany: vi.fn() },
+    checkoutIntent: { findUnique: vi.fn().mockResolvedValue(null) },
     commissionRequest: { create: vi.fn() },
     $transaction: vi.fn(),
   };
@@ -718,7 +719,9 @@ describe('verification gates on marketplace operations', () => {
   it('checkout only considers artwork whose seller is verified (trusted backend data)', async () => {
     sessionAs(['BUYER'], ACTOR);
     vi.mocked(prisma.artwork.findMany).mockResolvedValue([] as never);
-    const res = await post('/api/v1/checkout/session', { items: [{ artworkId: 'a1', quantity: 1 }] });
+    const res = await withAuth(request(app).post('/api/v1/checkout/session'))
+      .set('Idempotency-Key', 'checkout-test-key-1234567890')
+      .send({ items: [{ artworkId: 'a1', quantity: 1 }] });
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('ARTWORK_UNAVAILABLE');
     expect(vi.mocked(prisma.artwork.findMany).mock.calls[0]![0]).toMatchObject({

@@ -72,16 +72,21 @@ app.use(
 /* ------------------------------------------------------------------ */
 /* Body Parsing & Cookies                                             */
 /* ------------------------------------------------------------------ */
-app.use(json({ limit: config.jsonBodyLimit }));
-
 /* ------------------------------------------------------------------ */
 /* Stripe Webhook — MUST be registered before the JSON body parser.   */
 /* Stripe's signature verification needs the exact raw request bytes; */
 /* express.json() below would otherwise consume and re-serialize the  */
 /* body before this route ever saw it, breaking signature checks.     */
 /* ------------------------------------------------------------------ */
-app.post('/api/v1/webhooks/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
+app.post(
+  '/api/v1/webhooks/stripe',
+  express.raw({ type: 'application/json', limit: config.jsonBodyLimit }),
+  handleStripeWebhook,
+);
 
+/* ------------------------------------------------------------------ */
+/* Body Parsing & Cookies                                             */
+/* ------------------------------------------------------------------ */
 app.use(json({ limit: config.jsonBodyLimit }));
 app.use(hpp());
 

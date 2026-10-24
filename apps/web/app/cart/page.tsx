@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { createCheckoutSession } from '@/lib/checkoutApi';
+import { checkoutIntentStorageKey, createCheckoutSession } from '@/lib/checkoutApi';
 
 export default function CartPage() {
   const router = useRouter();
   const { cart, removeFromCart, totalPrice } = useCart();
-  const { appUser, loading: authLoading } = useAuth();
+  const { appUser, firebaseUser, loading: authLoading } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
@@ -26,13 +26,24 @@ export default function CartPage() {
     }
 
     setIsProcessing(true);
+    let storageKey: string | null = null;
     try {
       const items = cart.map((item) => ({ artworkId: item.id, quantity: 1 }));
-      const checkoutUrl = await createCheckoutSession(items);
+      storageKey = checkoutIntentStorageKey(firebaseUser!.uid, items);
+      let idempotencyKey = localStorage.getItem(storageKey);
+      if (!idempotencyKey) {
+        idempotencyKey = crypto.randomUUID();
+        localStorage.setItem(storageKey, idempotencyKey);
+      }
+      const checkoutUrl = await createCheckoutSession(items, idempotencyKey);
       // Full page navigation, not router.push — this goes to Stripe's
       // own domain, not an internal route.
       window.location.href = checkoutUrl;
     } catch (err) {
+      const code = (err as Error & { code?: string }).code;
+      if (storageKey && (code === 'CHECKOUT_INTENT_TERMINAL' || code === 'CHECKOUT_ALREADY_PAID')) {
+        localStorage.removeItem(storageKey);
+      }
       setCheckoutError(
         err instanceof Error ? err.message : 'Could not start checkout. Please try again.',
       );
