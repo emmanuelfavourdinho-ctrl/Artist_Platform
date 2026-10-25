@@ -49,7 +49,7 @@ export async function getArtistBySlug(req: Request, res: Response) {
 
   const [artworks, ratingAggregate, reviews] = await Promise.all([
     prisma.artwork.findMany({
-      where: { artistId: artist.id, status: 'PUBLISHED', visibility: 'PUBLIC' },
+        where: { artistId: artist.id, status: 'PUBLISHED', visibility: 'PUBLIC' },
       orderBy: { publishedAt: 'desc' },
       take: 24,
       select: {
@@ -108,7 +108,8 @@ export async function getArtistBySlug(req: Request, res: Response) {
         price: artwork.price,
         currency: artwork.currency,
         image: artwork.images[0] ?? null,
-        available: isAvailable(artwork.inventory),
+        available: isAvailable(artwork.inventory) && artwork.currency.toUpperCase() === 'USD',
+        priceReconciliationRequired: artwork.currency.toUpperCase() !== 'USD',
       })),
       reviews: reviews.map((review) => ({
         id: review.id,

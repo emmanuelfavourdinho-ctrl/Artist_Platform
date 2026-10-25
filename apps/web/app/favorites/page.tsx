@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { fetchUserFavorites, toggleFavoriteApi } from '@/lib/favoritesApi';
+import { formatListingPrice, getListingAvailabilityLabel } from '@/lib/listingPricing';
 
 export default function FavoritesPage() {
   const [artworks, setArtworks] = useState<any[]>([]);
@@ -89,8 +90,13 @@ export default function FavoritesPage() {
                 </div>
                 <div className="mt-4 pt-4 border-t border-[rgb(var(--border)/0.06)] flex justify-between items-center">
                   <span className="text-sm font-semibold tracking-tight">
-                    {art.currency} ${Number(art.price).toLocaleString()}
+                    {formatListingPrice(art.price, art.currency)}
                   </span>
+                  {getListingAvailabilityLabel(art.currency, art.available) && (
+                    <span className="text-xs uppercase tracking-wide text-muted">
+                      {getListingAvailabilityLabel(art.currency, art.available)}
+                    </span>
+                  )}
                 </div>
               </div>
             </article>

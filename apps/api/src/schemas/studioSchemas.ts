@@ -1,10 +1,25 @@
 import { z } from 'zod';
 
+const usdPriceSchema = z
+  .union([z.string(), z.number().finite()])
+  .transform((value) => String(value))
+  .refine((value) => /^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/.test(value), {
+    message: 'Price must be a positive USD amount with no more than two decimal places',
+  })
+  .refine((value) => {
+    try {
+      const [whole, fraction = ''] = value.split('.');
+      return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0') || '0') > 0n;
+    } catch {
+      return false;
+    }
+  }, { message: 'Price must be greater than 0' });
+
 export const createArtworkSchema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
   description: z.string().optional(),
-  price: z.coerce.number().positive('Price must be greater than 0'),
-  currency: z.string().default('USD'),
+  price: usdPriceSchema,
+  currency: z.literal('USD').default('USD'),
   images: z
     .array(
       z.object({

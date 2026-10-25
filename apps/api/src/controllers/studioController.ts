@@ -47,6 +47,7 @@ export async function getStudioArtworks(req: Request, res: Response, next: NextF
         artworks: artworks.map((artwork) => ({
           ...artwork,
           imageUrl: artwork.images[0]?.url ?? '',
+          priceReconciliationRequired: artwork.currency.toUpperCase() !== 'USD',
         })),
         artist,
       },

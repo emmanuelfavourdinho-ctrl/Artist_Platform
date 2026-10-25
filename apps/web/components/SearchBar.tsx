@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
+import { formatListingPrice } from '../lib/listingPricing';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
 
@@ -90,7 +91,7 @@ export function SearchBar() {
                   {item.text}
                 </p>
                 <p className="text-xs text-[rgb(var(--muted))] font-mono">
-                  {item.artwork.artistName} • ${Number(item.artwork.price).toLocaleString()}
+                  {item.artwork.artistName} • {formatListingPrice(item.artwork.price, item.artwork.currency)}
                 </p>
               </div>
             </div>

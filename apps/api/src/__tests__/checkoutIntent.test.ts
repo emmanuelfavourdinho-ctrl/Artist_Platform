@@ -4,6 +4,7 @@ const harness = vi.hoisted(() => ({
   intents: new Map<string, any>(),
   reservations: [] as any[],
   inventory: { quantity: 4, reservedQuantity: 0, soldQuantity: 0, version: 1 },
+  artworkCurrency: 'USD',
   stripeCreate: vi.fn(),
   txTail: Promise.resolve() as Promise<void>,
 }));
@@ -52,7 +53,7 @@ vi.mock('../lib/prisma.js', () => {
         id,
         title: `Artwork ${id}`,
         price: 125,
-        currency: 'USD',
+        currency: harness.artworkCurrency,
         artistId: 'artist-1',
         images: [],
         inventory: harness.inventory,
@@ -126,6 +127,7 @@ beforeEach(() => {
   harness.intents.clear();
   harness.reservations = [];
   harness.inventory = { quantity: 4, reservedQuantity: 0, soldQuantity: 0, version: 1 };
+  harness.artworkCurrency = 'USD';
   harness.txTail = Promise.resolve();
   harness.stripeCreate.mockResolvedValue({ id: 'cs_test_stable', url: 'https://checkout.test/session', expires_at: Math.floor(Date.now() / 1000) + 3600 });
 });
@@ -141,6 +143,19 @@ describe('durable checkout intent', () => {
     expect(harness.stripeCreate).toHaveBeenCalledTimes(1);
     expect(harness.reservations).toHaveLength(1);
     expect(harness.inventory.reservedQuantity).toBe(1);
+    const savedIntent = [...harness.intents.values()][0]!;
+    expect(savedIntent.providerRequest.metadata).toMatchObject({ commissionRateBps: '1000' });
+    expect(savedIntent.providerRequest.metadata.commissionRate).toBeUndefined();
+  });
+
+  it('does not create a checkout for a legacy non-USD listing before reconciliation', async () => {
+    harness.artworkCurrency = 'XAF';
+    const result = await submit();
+    expect(result.statusCode).toBe(409);
+    expect(result.error.code).toBe('LISTING_PRICE_UNVERIFIED');
+    expect(harness.intents.size).toBe(0);
+    expect(harness.reservations).toHaveLength(0);
+    expect(harness.stripeCreate).not.toHaveBeenCalled();
   });
 
   it('recovers the persisted intent after controller module reconstruction', async () => {

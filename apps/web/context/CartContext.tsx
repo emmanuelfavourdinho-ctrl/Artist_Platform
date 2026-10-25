@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { sumUsdListingPrices } from '../lib/listingPricing';
 
 export interface CartItem {
   id: string;
@@ -15,7 +16,7 @@ interface CartContextType {
   addToCart: (item: CartItem) => void;
   removeFromCart: (id: string) => void;
   clearCart: () => void;
-  totalPrice: number;
+  totalPrice: string | null;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -48,7 +49,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = () => setCart([]);
 
-  const totalPrice = cart.reduce((acc, item) => acc + Number(item.price), 0);
+  const totalPrice = sumUsdListingPrices(cart);
 
   return (
     <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, totalPrice }}>

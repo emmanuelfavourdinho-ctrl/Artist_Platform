@@ -12,6 +12,7 @@ export interface ArtistArtworkSummary {
   currency: string;
   image: { url: string; altText: string | null } | null;
   available: boolean;
+  priceReconciliationRequired?: boolean;
 }
 
 export interface ArtistReview {

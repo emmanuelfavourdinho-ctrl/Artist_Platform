@@ -4,7 +4,17 @@ import type Stripe from 'stripe';
 import { prisma } from '../lib/prisma.js';
 import { stripe } from '../lib/stripe.js';
 import { config } from '../config/index.js';
-import { toStripeMinorUnits } from '../lib/stripeMoney.js';
+import {
+  allocateCommissionMinorUnits,
+  basisPointsToRateString,
+  minorUnitsToLegacyStripeDecimal,
+  minorUnitsToDecimal,
+  parseLegacyCommissionRate,
+  roundHalfUp,
+  toLegacyStripeMinorUnits,
+  toMinorUnits,
+} from '../lib/money.js';
+import { PLATFORM_COMMISSION_BASIS_POINTS } from '../lib/financialPolicy.js';
 import { claimActiveReservations, releaseReservationGroup } from '../services/checkoutReservationTransitions.js';
 
 function isUniqueConstraintError(error: unknown): error is { code: 'P2002' } {
@@ -189,8 +199,8 @@ async function fulfillCheckoutSession(
   if (existingOrder) return true;
 
   const userId = session.metadata?.userId;
-  const commissionRate = Number(session.metadata?.commissionRate ?? config.platformCommissionRate);
-  if (!userId || !Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 1) {
+  const commissionPolicy = getSessionCommissionPolicy(session.metadata);
+  if (!userId || !commissionPolicy) {
     throw new Error(`Checkout session ${session.id} has invalid fulfillment metadata`);
   }
 
@@ -230,12 +240,20 @@ async function fulfillCheckoutSession(
     throw new Error(`Checkout session ${session.id} currency does not match its reservations`);
   }
 
-  const expectedAmount = reservations.reduce(
-    (sum, reservation) =>
-      sum + toStripeMinorUnits(Number(reservation.artwork.price), currency) * reservation.quantity,
-    0,
-  );
-  if (session.amount_total === null || session.amount_total !== expectedAmount) {
+  const commissionLines = reservations.map((reservation) => ({
+    id: reservation.id,
+    subtotalMinor:
+      (commissionPolicy.kind === 'legacy'
+        ? toLegacyStripeMinorUnits(reservation.artwork.price, currency)
+        : toMinorUnits(reservation.artwork.price, currency)) * BigInt(reservation.quantity),
+  }));
+  const subtotalMinor = commissionLines.reduce((sum, line) => sum + line.subtotalMinor, 0n);
+  if (
+    subtotalMinor > BigInt(Number.MAX_SAFE_INTEGER) ||
+    session.amount_total === null ||
+    !Number.isSafeInteger(session.amount_total) ||
+    BigInt(session.amount_total) !== subtotalMinor
+  ) {
     throw new Error(`Checkout session ${session.id} amount does not match its reservations`);
   }
 
@@ -245,12 +263,19 @@ async function fulfillCheckoutSession(
 
   await claimActiveReservations(tx, reservations, 'CONVERTED');
 
+  // New-policy sessions use aggregate order rounding and deterministic
+  // allocation. Legacy sessions retain their original per-item rounding.
+  const commission = commissionPolicy.kind === 'fixed'
+    ? allocateCommissionMinorUnits(commissionLines, commissionPolicy.basisPoints)
+    : null;
   const shipping = (session as any).shipping_details ?? session.customer_details ?? {};
   const billing = session.customer_details ?? {};
-  const subtotal = reservations.reduce(
-    (sum, reservation) => sum + Number(reservation.artwork.price) * reservation.quantity,
-    0,
-  );
+  const legacyAmount = (amountMinor: bigint) =>
+    commissionPolicy.kind === 'legacy'
+      ? minorUnitsToLegacyStripeDecimal(amountMinor, currency)
+      : minorUnitsToDecimal(amountMinor, currency);
+  const subtotal = legacyAmount(subtotalMinor);
+  const currencyCode = currency.toUpperCase();
 
   const order = await tx.order.create({
     data: {
@@ -260,13 +285,21 @@ async function fulfillCheckoutSession(
       status: 'CONFIRMED',
       subtotal,
       totalAmount: subtotal,
-      currency,
+      currency: currencyCode,
       shippingAddressSnapshot: shipping as object,
       billingAddressSnapshot: billing as object,
       items: {
         create: reservations.map((reservation) => {
-          const lineSubtotal = Number(reservation.artwork.price) * reservation.quantity;
-          const commissionAmount = Math.round(lineSubtotal * commissionRate * 100) / 100;
+          const lineSubtotalMinor = commissionLines.find((line) => line.id === reservation.id)!.subtotalMinor;
+          const commissionAmountMinor = commissionPolicy.kind === 'fixed'
+            ? commission!.byLineId.get(reservation.id)!
+            : roundHalfUp(
+                lineSubtotalMinor * commissionPolicy.numerator,
+                commissionPolicy.denominator,
+              );
+          const rateSnapshot = commissionPolicy.kind === 'fixed'
+            ? basisPointsToRateString(commissionPolicy.basisPoints)
+            : commissionPolicy.snapshot;
           return {
             artworkId: reservation.artwork.id,
             artistId: reservation.artwork.artistId,
@@ -274,10 +307,10 @@ async function fulfillCheckoutSession(
             artistNameSnapshot: reservation.artwork.artist.displayName,
             unitPrice: reservation.artwork.price,
             quantity: reservation.quantity,
-            currency: reservation.artwork.currency,
-            subtotal: lineSubtotal,
-            commissionRate,
-            commissionAmount,
+            currency: reservation.artwork.currency.toUpperCase(),
+            subtotal: legacyAmount(lineSubtotalMinor),
+            commissionRate: rateSnapshot,
+            commissionAmount: legacyAmount(commissionAmountMinor),
           };
         }),
       },
@@ -287,7 +320,7 @@ async function fulfillCheckoutSession(
           providerPaymentId:
             typeof session.payment_intent === 'string' ? session.payment_intent : session.id,
           amount: subtotal,
-          currency,
+          currency: currencyCode,
           status: 'SUCCEEDED',
           paidAt: new Date(),
         },
@@ -334,4 +367,27 @@ async function fulfillCheckoutSession(
     throw new Error(`Checkout intent for paid session ${session.id} is not in a fulfillable state`);
   }
   return false;
+}
+
+/**
+ * New sessions carry the fixed basis-point policy. Older signed Stripe
+ * sessions keep the rate snapshot supplied by the server when they were
+ * created, including the historical 15% default; no environment/client rate
+ * is consulted while fulfilling an event.
+ */
+type SessionCommissionPolicy =
+  | { kind: 'fixed'; basisPoints: number }
+  | { kind: 'legacy'; numerator: bigint; denominator: bigint; snapshot: string };
+
+function getSessionCommissionPolicy(metadata: Stripe.Metadata | null): SessionCommissionPolicy | null {
+  if (!metadata) return null;
+  if (metadata.commissionRateBps !== undefined) {
+    return metadata.commissionRateBps === String(PLATFORM_COMMISSION_BASIS_POINTS)
+      ? { kind: 'fixed', basisPoints: PLATFORM_COMMISSION_BASIS_POINTS }
+      : null;
+  }
+  const legacyRate = metadata.commissionRate;
+  if (!legacyRate) return null;
+  const parsed = parseLegacyCommissionRate(legacyRate);
+  return parsed ? { kind: 'legacy', ...parsed } : null;
 }

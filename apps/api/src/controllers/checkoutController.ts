@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { stripe } from '../lib/stripe.js';
 import { config } from '../config/index.js';
 import { HttpError } from '../lib/httpError.js';
+import { PLATFORM_COMMISSION_BASIS_POINTS } from '../lib/financialPolicy.js';
 import { toStripeMinorUnits } from '../lib/stripeMoney.js';
 import { releaseReservationGroup, ReservationTransitionConflict } from '../services/checkoutReservationTransitions.js';
 
@@ -43,6 +44,16 @@ function checkoutUrl(intent: { status: string; checkoutUrl: string | null }): st
   return intent.status === 'OPEN' ? intent.checkoutUrl : null;
 }
 
+function intentContainsOnlyUsdListings(intent: { providerRequest: unknown }): boolean {
+  const request = intent.providerRequest as {
+    line_items?: { price_data?: { currency?: string } }[];
+  };
+  return Boolean(
+    request?.line_items?.length &&
+      request.line_items.every((item) => item.price_data?.currency?.toLowerCase() === 'usd'),
+  );
+}
+
 export async function createCheckoutSession(
   req: Request,
   res: Response,
@@ -71,6 +82,14 @@ export async function createCheckoutSession(
           'This checkout key was already used for a different cart. Start a new checkout attempt.',
           'IDEMPOTENCY_KEY_REUSED',
         );
+      }
+      if (
+        ['READY', 'CREATING', 'UNKNOWN', 'OPEN', 'COMPLETED', 'RECONCILIATION_REQUIRED'].includes(intent.status) &&
+        !intentContainsOnlyUsdListings(intent)
+      ) {
+        throw new HttpError(409, 'This older checkout contains a listing whose USD price has not been verified.', {
+          code: 'LISTING_PRICE_UNVERIFIED',
+        });
       }
       if (intent.status === 'OPEN' && intent.providerExpiresAt && intent.providerExpiresAt <= new Date()) {
         throw new HttpError(503, 'This checkout session is being checked for expiration. Retry shortly.', {
@@ -123,6 +142,12 @@ export async function createCheckoutSession(
         });
       }
 
+      if (artworks.some((artwork) => artwork.currency.toUpperCase() !== 'USD')) {
+        throw new HttpError(409, 'This artwork is unavailable until its USD listing price is verified.', {
+          code: 'LISTING_PRICE_UNVERIFIED',
+        });
+      }
+
       const currencies = new Set(artworks.map((artwork) => artwork.currency.toLowerCase()));
       if (currencies.size > 1) {
         throw new HttpError(400, 'Items in your cart use different currencies. Please check out separately.', {
@@ -144,7 +169,7 @@ export async function createCheckoutSession(
               images: artwork.images[0] ? [artwork.images[0].url] : undefined,
               metadata: { artworkId: artwork.id, artistId: artwork.artistId },
             },
-            unit_amount: toStripeMinorUnits(Number(artwork.price), currency),
+            unit_amount: toStripeMinorUnits(artwork.price, currency),
           },
           quantity: quantityByArtwork.get(artwork.id)!,
         })),
@@ -154,7 +179,7 @@ export async function createCheckoutSession(
         cancel_url: `${config.frontendUrl}/cart`,
         metadata: {
           userId,
-          commissionRate: String(config.platformCommissionRate),
+          commissionRateBps: String(PLATFORM_COMMISSION_BASIS_POINTS),
           reservationGroupId,
         },
       };

@@ -84,7 +84,6 @@ const envSchema = z.object({
     ? z.string().min(1, 'STRIPE_WEBHOOK_SECRET is required').default('whsec_test_placeholder_key')
     : z.string().min(1, 'STRIPE_WEBHOOK_SECRET is required'),
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
-  PLATFORM_COMMISSION_RATE: z.coerce.number().min(0).max(1).default(0.15),
 });
 
 const env = envSchema.parse(process.env);
@@ -121,5 +120,4 @@ export const config = {
   stripeSecretKey: env.STRIPE_SECRET_KEY,
   stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
   frontendUrl: env.FRONTEND_URL,
-  platformCommissionRate: env.PLATFORM_COMMISSION_RATE,
 };

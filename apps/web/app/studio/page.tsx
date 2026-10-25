@@ -10,6 +10,7 @@ import {
 import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
 import { useAuth } from '../../context/AuthContext';
 import { VerificationTaskBanner } from '../../components/studio/VerificationTaskBanner';
+import { formatListingPrice } from '../../lib/listingPricing';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
 const API_BASE_URL = API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
@@ -63,7 +64,7 @@ function StudioContent() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         credentials: 'include',
-        body: JSON.stringify({ title, description, price: Number(price), images }),
+        body: JSON.stringify({ title, description, price, currency: 'USD', images }),
       });
 
       if (res.ok) {
@@ -144,10 +145,14 @@ function StudioContent() {
                     </div>
                   </td>
                   <td className="p-4 font-['Fraunces'] font-normal text-base">{art.title}</td>
-                  <td className="p-4 font-mono">${Number(art.price).toLocaleString()}</td>
+                  <td className="p-4 font-mono">{formatListingPrice(art.price, art.currency)}</td>
                   <td className="p-4">
                     <span className="px-2.5 py-1 text-[10px] uppercase font-mono rounded bg-[rgb(var(--accent)/0.15)] text-[rgb(var(--accent))]">
-                      {art.available ? 'Available' : 'Sold'}
+                      {art.priceReconciliationRequired
+                        ? 'USD price verification required'
+                        : art.available
+                          ? 'Available'
+                          : 'Sold'}
                     </span>
                   </td>
                 </tr>

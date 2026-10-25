@@ -153,7 +153,7 @@ function checkoutEvent(id: string, sessionId = 'cs_test_1') {
         amount_total: 12500,
         metadata: {
           userId: 'buyer-1',
-          commissionRate: '0.15',
+          commissionRateBps: '1000',
           reservationGroupId: 'reservation-group-1',
         },
         customer_details: null,
@@ -246,10 +246,16 @@ describe('Stripe webhook fulfillment', () => {
     const order = harness.orders.get('cs_test_1')!;
     expect(order.data.checkoutSessionId).toBe('cs_test_1');
     expect(order.data.status).toBe('CONFIRMED');
+    expect(order.data.items.create[0]).toMatchObject({
+      subtotal: '125.00',
+      commissionRate: '0.1000',
+      commissionAmount: '12.50',
+      currency: 'USD',
+    });
     expect(order.data.payments.create).toMatchObject({
       providerPaymentId: 'pi_cs_test_1',
-      amount: 125,
-      currency: 'usd',
+      amount: '125.00',
+      currency: 'USD',
       status: 'SUCCEEDED',
     });
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
@@ -323,6 +329,152 @@ describe('Stripe webhook fulfillment', () => {
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
     expect(harness.inventory.get('artwork-2')).toEqual({ reservedQuantity: 0, soldQuantity: 2 });
     expect(harness.orders.size).toBe(1);
+    const itemSnapshots = harness.orders.get('cs_test_1')!.data.items.create;
+    expect(itemSnapshots.map((item: any) => item.commissionAmount)).toEqual(['12.50', '25.00']);
+    expect(itemSnapshots.reduce((sum: number, item: any) => sum + Number(item.commissionAmount), 0)).toBe(37.5);
+  });
+
+  it('rounds order commission half-up and preserves the captured legacy 15% rate', async () => {
+    harness.reservations[0].artwork.price = '0.05';
+    const tiny = checkoutEvent('evt_tiny');
+    tiny.data.object.amount_total = 5;
+    const rounded = await deliver(tiny);
+    expect(rounded.status).toBe(200);
+    expect(harness.orders.get('cs_test_1')!.data.items.create[0]).toMatchObject({
+      subtotal: '0.05',
+      commissionRate: '0.1000',
+      commissionAmount: '0.01',
+    });
+
+    harness.events.clear();
+    harness.orders.clear();
+    harness.reservations[0].status = 'ACTIVE';
+    harness.reservations[0].orderId = null;
+    harness.reservations[0].artwork.price = 125;
+    harness.inventory.set('artwork-1', { reservedQuantity: 1, soldQuantity: 0 });
+    const legacy = checkoutEvent('evt_legacy_15');
+    legacy.data.object.amount_total = 12500;
+    legacy.data.object.metadata.commissionRateBps = undefined;
+    legacy.data.object.metadata.commissionRate = '0.15';
+    const legacyResult = await deliver(legacy);
+    expect(legacyResult.status).toBe(200);
+    expect(harness.orders.get('cs_test_1')!.data.items.create[0]).toMatchObject({
+      commissionRate: '0.15',
+      commissionAmount: '18.75',
+    });
+  });
+
+  it('fulfills a signed legacy session with a two-decimal currency and exact captured rate', async () => {
+    harness.reservations[0].artwork.price = '12.34';
+    harness.reservations[0].artwork.currency = 'SEK';
+    const legacy = checkoutEvent('evt_legacy_sek');
+    legacy.data.object.currency = 'sek';
+    legacy.data.object.amount_total = 1234;
+    legacy.data.object.metadata.commissionRateBps = undefined;
+    legacy.data.object.metadata.commissionRate = '0.12345';
+
+    const response = await deliver(legacy);
+
+    expect(response.status).toBe(200);
+    expect(harness.orders.get('cs_test_1')!.data).toMatchObject({
+      currency: 'SEK',
+      totalAmount: '12.34',
+      items: {
+        create: [{
+          currency: 'SEK',
+          commissionRate: '0.12345',
+          commissionAmount: '1.52',
+        }],
+      },
+      payments: {
+        create: { currency: 'SEK', amount: '12.34' },
+      },
+    });
+  });
+
+  it('fulfills and deduplicates a signed zero-decimal legacy checkout', async () => {
+    harness.reservations[0].artwork.price = '500.00';
+    harness.reservations[0].artwork.currency = 'XAF';
+    const legacy = checkoutEvent('evt_legacy_xaf');
+    legacy.data.object.currency = 'xaf';
+    legacy.data.object.amount_total = 500;
+    legacy.data.object.metadata.commissionRateBps = undefined;
+    legacy.data.object.metadata.commissionRate = '0.15';
+
+    const first = await deliver(legacy);
+    const duplicate = await deliver(legacy);
+
+    expect(first.status).toBe(200);
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.body.duplicate).toBe(true);
+    expect(harness.orders.size).toBe(1);
+    expect(harness.orders.get('cs_test_1')!.data).toMatchObject({
+      currency: 'XAF',
+      totalAmount: '500',
+      items: { create: [{ commissionAmount: '75', currency: 'XAF' }] },
+      payments: { create: { currency: 'XAF', amount: '500' } },
+    });
+    expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
+  });
+
+  it('keeps the historical per-item rounding rule for legacy commission snapshots', async () => {
+    harness.reservations[0].artwork.price = '0.05';
+    harness.reservations.push({
+      ...harness.reservations[0],
+      id: 'reservation-2',
+      artworkId: 'artwork-2',
+      artwork: { ...harness.reservations[0].artwork, id: 'artwork-2' },
+    });
+    harness.inventory.set('artwork-2', { reservedQuantity: 1, soldQuantity: 0 });
+    const legacy = checkoutEvent('evt_legacy_per_item_rounding');
+    legacy.data.object.amount_total = 10;
+    legacy.data.object.metadata.commissionRateBps = undefined;
+    legacy.data.object.metadata.commissionRate = '0.10';
+
+    const response = await deliver(legacy);
+
+    expect(response.status).toBe(200);
+    expect(harness.orders.get('cs_test_1')!.data.items.create.map((item: any) => item.commissionAmount))
+      .toEqual(['0.01', '0.01']);
+  });
+
+  it('rejects invalid legacy rates and invalid fixed-rate metadata without fulfillment', async () => {
+    const event = checkoutEvent('evt_invalid_rate');
+    event.data.object.metadata.commissionRate = '1.0001';
+    event.data.object.metadata.commissionRateBps = undefined;
+
+    const legacyResponse = await deliver(event);
+    expect(legacyResponse.status).toBe(500);
+    expect(harness.orders.size).toBe(0);
+    expect(harness.events.size).toBe(0);
+
+    const fixedEvent = checkoutEvent('evt_invalid_fixed_rate');
+    fixedEvent.data.object.metadata.commissionRate = '0.15';
+    fixedEvent.data.object.metadata.commissionRateBps = '1001';
+    const fixedResponse = await deliver(fixedEvent);
+
+    expect(fixedResponse.status).toBe(500);
+    expect(harness.orders.size).toBe(0);
+    expect(harness.events.size).toBe(0);
+  });
+
+  it('rejects a legacy amount mismatch and unknown currency without recording payment', async () => {
+    const mismatch = checkoutEvent('evt_legacy_mismatch');
+    mismatch.data.object.metadata.commissionRateBps = undefined;
+    mismatch.data.object.metadata.commissionRate = '0.15';
+    mismatch.data.object.amount_total = 12499;
+    const mismatchResponse = await deliver(mismatch);
+    expect(mismatchResponse.status).toBe(500);
+    expect(harness.orders.size).toBe(0);
+
+    const unsupported = checkoutEvent('evt_legacy_unknown_currency');
+    unsupported.data.object.metadata.commissionRateBps = undefined;
+    unsupported.data.object.metadata.commissionRate = '0.15';
+    unsupported.data.object.currency = 'xyz';
+    harness.reservations[0].artwork.currency = 'XYZ';
+    const unsupportedResponse = await deliver(unsupported);
+    expect(unsupportedResponse.status).toBe(500);
+    expect(harness.orders.size).toBe(0);
   });
 
   it('returns a retryable failure and rolls back the event receipt when fulfillment fails', async () => {

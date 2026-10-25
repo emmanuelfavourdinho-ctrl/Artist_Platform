@@ -120,7 +120,8 @@ describe('analytics calculations', () => {
     vi.mocked(prisma.payment.groupBy).mockImplementation((async (args: { by: string[] }) =>
       args.by.includes('currency')
         ? [
-            { currency: 'USD', _count: { _all: 2 }, _sum: { amount: '150.50' } },
+            { currency: 'USD', _count: { _all: 2 }, _sum: { amount: '100.10' } },
+            { currency: 'usd', _count: { _all: 1 }, _sum: { amount: '50.40' } },
             { currency: 'XAF', _count: { _all: 1 }, _sum: { amount: '50000' } },
           ]
         : [
@@ -131,12 +132,30 @@ describe('analytics calculations', () => {
     const res = await get('/api/v1/analytics/dashboard?range=90d');
 
     expect(res.body.data.payments.succeededByCurrency).toEqual([
-      { currency: 'USD', payments: 2, total: 150.5 },
+      { currency: 'USD', payments: 3, total: 150.5 },
       { currency: 'XAF', payments: 1, total: 50000 },
     ]);
     expect(res.body.data.payments.byStatus).toEqual({ SUCCEEDED: 3, FAILED: 1 });
     // Honest about what is not recorded anywhere in the data model.
     expect(res.body.data.payments.refundAmountsTracked).toBe(false);
+  });
+
+  it('normalizes historical case variants while aggregating order totals exactly', async () => {
+    signInAs('ADMIN');
+    mockEmptyAnalytics();
+    vi.mocked(prisma.order.groupBy).mockImplementation((async (args: { by: string[] }) =>
+      args.by.includes('currency')
+        ? [
+            { currency: 'usd', _count: { _all: 1 }, _sum: { totalAmount: '10.10' } },
+            { currency: 'USD', _count: { _all: 2 }, _sum: { totalAmount: '20.20' } },
+          ]
+        : []) as never);
+
+    const res = await get('/api/v1/analytics/dashboard');
+
+    expect(res.body.data.orders.grossOrderValueByCurrency).toEqual([
+      { currency: 'USD', orders: 3, total: 30.3 },
+    ]);
   });
 
   it('measures payments by paidAt and only counts SUCCEEDED ones', async () => {
@@ -163,11 +182,16 @@ describe('analytics calculations', () => {
               _count: { _all: 4 },
               _sum: { subtotal: '1000.00', commissionAmount: '150.00' },
             },
+            {
+              currency: 'usd',
+              _count: { _all: 1 },
+              _sum: { subtotal: '2.00', commissionAmount: '0.25' },
+            },
           ]) as never);
 
     const res = await get('/api/v1/analytics/dashboard');
     expect(res.body.data.commission).toEqual([
-      { currency: 'USD', orderItems: 4, grossItemSales: 1000, platformCommission: 150 },
+      { currency: 'USD', orderItems: 5, grossItemSales: 1002, platformCommission: 150.25 },
     ]);
   });
 
@@ -232,11 +256,12 @@ describe('analytics calculations', () => {
     mockEmptyAnalytics();
     vi.mocked(prisma.$queryRaw).mockResolvedValue([
       { day: new Date('2026-10-01T00:00:00Z'), currency: 'USD', payments: 2, total: '120.00' },
+      { day: new Date('2026-10-01T00:00:00Z'), currency: 'usd', payments: 1, total: '30.00' },
       { day: new Date('2026-10-01T00:00:00Z'), currency: 'XAF', payments: 1, total: '5000' },
     ] as never);
     const res = await get('/api/v1/analytics/dashboard');
     expect(res.body.data.timeSeries).toEqual([
-      { date: '2026-10-01', currency: 'USD', payments: 2, total: 120 },
+      { date: '2026-10-01', currency: 'USD', payments: 3, total: 150 },
       { date: '2026-10-01', currency: 'XAF', payments: 1, total: 5000 },
     ]);
   });

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
 import { useAuth } from '../../context/AuthContext';
 import { fetchUserFavorites } from '../../lib/favoritesApi';
+import { formatListingPrice, getListingAvailabilityLabel } from '../../lib/listingPricing';
 import type { ArtworkSummary } from '../../types/artwork';
 
 function FavoritesPreview() {
@@ -88,10 +89,12 @@ function FavoritesPreview() {
             <p className="mt-1 text-sm text-muted">{artwork.artist.name}</p>
             <div className="mt-2 flex items-center justify-between">
               <span className="text-sm text-foreground">
-                {artwork.currency} {Number(artwork.price).toLocaleString()}
+                {formatListingPrice(artwork.price, artwork.currency)}
               </span>
-              {!artwork.available && (
-                <span className="text-xs uppercase tracking-wide text-muted">Sold</span>
+              {getListingAvailabilityLabel(artwork.currency, artwork.available) && (
+                <span className="text-xs uppercase tracking-wide text-muted">
+                  {getListingAvailabilityLabel(artwork.currency, artwork.available)}
+                </span>
               )}
             </div>
           </div>

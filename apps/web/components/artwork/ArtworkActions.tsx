@@ -108,7 +108,13 @@ export function ArtworkActions({
               : 'bg-accent text-background hover:opacity-90'
           }`}
         >
-          {!available ? 'Sold' : inCart ? 'In Cart' : 'Add to Cart'}
+          {!available
+            ? currency.toUpperCase() !== 'USD'
+              ? 'Unavailable: price verification'
+              : 'Sold'
+            : inCart
+              ? 'In Cart'
+              : 'Add to Cart'}
         </button>
 
         <button

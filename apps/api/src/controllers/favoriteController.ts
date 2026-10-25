@@ -65,7 +65,8 @@ export async function getFavorites(req: Request, res: Response, next: NextFuncti
         slug: artwork.artist.slug,
         verified: artwork.artist.verificationStatus === 'VERIFIED',
       },
-      available: isAvailable(artwork.inventory),
+      available: isAvailable(artwork.inventory) && artwork.currency.toUpperCase() === 'USD',
+      priceReconciliationRequired: artwork.currency.toUpperCase() !== 'USD',
     }));
 
     res.json({
