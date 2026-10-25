@@ -53,11 +53,37 @@ import {
 } from '../controllers/adminArtworkController.js';
 import { decideReport, getReportDetail, listReports } from '../controllers/reportController.js';
 import { listReportsQuerySchema, updateReportSchema } from '../validation/reports.js';
+import {
+  getAdminOrder,
+  getAdminPayment,
+  listAdminOrders,
+  listAdminPayments,
+} from '../controllers/adminFinanceController.js';
+import {
+  listAdminOrdersQuerySchema,
+  listAdminPaymentsQuerySchema,
+} from '../validation/adminFinance.js';
 
 export const adminRouter = Router();
 
 adminRouter.get('/session', requirePermission('admin.access'), getAdminSession);
 adminRouter.get('/overview', requirePermission('admin.access'), asyncHandler(getOverview));
+
+// Read-only order and payment inspection for Finance Admins and Admins.
+adminRouter.get(
+  '/orders',
+  requirePermission('finance.view'),
+  validateQuery(listAdminOrdersQuerySchema),
+  asyncHandler(listAdminOrders),
+);
+adminRouter.get('/orders/:id', requirePermission('finance.view'), asyncHandler(getAdminOrder));
+adminRouter.get(
+  '/payments',
+  requirePermission('finance.view'),
+  validateQuery(listAdminPaymentsQuerySchema),
+  asyncHandler(listAdminPayments),
+);
+adminRouter.get('/payments/:id', requirePermission('finance.view'), asyncHandler(getAdminPayment));
 
 // Users, enforcement, roles, audit log
 adminRouter.get(

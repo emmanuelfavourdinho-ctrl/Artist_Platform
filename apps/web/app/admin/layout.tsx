@@ -45,7 +45,7 @@ const ADMIN_NAV: NavGroup[] = [
         permission: 'artists.review',
       },
       { label: 'Artwork Moderation', href: '/admin/artworks', permission: 'artworks.moderate' },
-      { label: 'Orders & Payments', permission: 'finance.view' },
+      { label: 'Orders & Payments', href: '/admin/orders', permission: 'finance.view' },
       { label: 'Commissions', permission: 'users.view' },
     ],
   },

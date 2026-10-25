@@ -257,6 +257,85 @@ export interface ListAuditParams {
   to?: string;
 }
 
+export interface AdminFinanceParams {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  currency?: string;
+  from?: string;
+  to?: string;
+  reference?: string;
+}
+
+export interface AdminOrderRow {
+  id: string;
+  orderNumber: string;
+  status: string;
+  subtotal: string;
+  shippingAmount: string;
+  taxAmount: string;
+  discountAmount: string;
+  totalAmount: string;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+  _count: { items: number; payments: number };
+}
+
+export interface AdminPaymentRow {
+  id: string;
+  provider: string;
+  providerPaymentId: string | null;
+  amount: string;
+  currency: string;
+  status: string;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminPaymentListRow extends AdminPaymentRow {
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    totalAmount: string;
+    currency: string;
+    createdAt: string;
+  };
+}
+
+export interface AdminOrderDetail extends AdminOrderRow {
+  items: {
+    id: string;
+    titleSnapshot: string;
+    artistNameSnapshot: string;
+    unitPrice: string;
+    quantity: number;
+    currency: string;
+    subtotal: string;
+    commissionRate: string;
+    commissionAmount: string;
+  }[];
+  payments: AdminPaymentRow[];
+}
+
+export interface AdminPaymentDetail extends AdminPaymentRow {
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    subtotal: string;
+    shippingAmount: string;
+    taxAmount: string;
+    discountAmount: string;
+    totalAmount: string;
+    currency: string;
+    createdAt: string;
+    items: AdminOrderDetail['items'];
+  };
+}
+
 export const fetchAdminSession = () => adminGet<AdminSession>('/admin/session');
 
 export const fetchAdminUsers = (params: ListUsersParams) =>
@@ -276,3 +355,13 @@ export const changeUserRole = (
 
 export const fetchAuditLogs = (params: ListAuditParams) =>
   adminRequest<AuditEntry[]>('GET', '/admin/audit-logs', { query: { ...params, pageSize: 25 } });
+
+export const fetchAdminOrders = (params: AdminFinanceParams) =>
+  adminRequest<AdminOrderRow[]>('GET', '/admin/orders', { query: { ...params, pageSize: params.pageSize ?? 20 } });
+
+export const fetchAdminOrder = (id: string) => adminGet<AdminOrderDetail>(`/admin/orders/${id}`);
+
+export const fetchAdminPayments = (params: AdminFinanceParams) =>
+  adminRequest<AdminPaymentListRow[]>('GET', '/admin/payments', { query: { ...params, pageSize: params.pageSize ?? 20 } });
+
+export const fetchAdminPayment = (id: string) => adminGet<AdminPaymentDetail>(`/admin/payments/${id}`);
