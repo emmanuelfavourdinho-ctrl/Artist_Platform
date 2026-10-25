@@ -61,5 +61,17 @@ export const listAdminPaymentsQuerySchema = z
     message: 'End date must be on or after start date',
   });
 
+export const listAdminFinancialActivitiesQuerySchema = z
+  .object({
+    ...dateRange,
+    movementType: z.enum(['CHECKOUT_PAYMENT_CONFIRMED']).optional(),
+    provider: z.string().trim().min(1).max(64).optional(),
+  })
+  .refine(validDateRange, {
+    path: ['to'],
+    message: 'End date must be on or after start date',
+  });
+
 export type ListAdminOrdersQuery = z.infer<typeof listAdminOrdersQuerySchema>;
 export type ListAdminPaymentsQuery = z.infer<typeof listAdminPaymentsQuerySchema>;
+export type ListAdminFinancialActivitiesQuery = z.infer<typeof listAdminFinancialActivitiesQuerySchema>;

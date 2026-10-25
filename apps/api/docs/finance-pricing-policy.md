@@ -77,6 +77,31 @@ also are not currently retrieved or stored separately from payments. Add a
 separate verified fee amount/currency field only when a provider source and
 reconciliation semantics are approved; do not derive fees from commission.
 
+## Financial activity register
+
+The append-only `FinancialActivity` register records only a signed, paid Stripe
+Checkout event after the existing fulfillment checks have verified the
+session's payment status, amount, currency, commission metadata, and active
+reservations. Its amount is stored in provider currency minor units, with both
+the Stripe event occurrence time (when available) and server-recorded time.
+The stable provider-object reference and unique movement identifier prevent a
+second event ID for the same payment object from creating another activity.
+Order, payment, inventory, webhook receipt, and activity writes share the
+existing database transaction.
+
+This is a financial activity register, not a complete double-entry accounting
+system and not a replacement for `Order` or `Payment`. A checkout payment
+confirmation does not establish provider settlement or artist payout. There
+are no fee, refund, dispute, settlement, or payout entries until verified
+provider-backed workflows exist. Existing orders and payments are not
+backfilled into the register. A verified paid legacy session that cannot pass
+the supported-currency or metadata checks remains retryable and requires
+operator reconciliation against the provider's Checkout Session/PaymentIntent
+and authoritative reservation records; the webhook returns a retryable failure
+when automatic fulfillment cannot verify the session. Do not broaden currency
+compatibility or create a financial activity manually from analytics or order
+status alone.
+
 Analytics currently returns monetary totals as JSON numbers to preserve the
 existing dashboard contract. Database aggregation and currency normalization
 use exact decimal arithmetic, but conversion to JavaScript numbers can lose

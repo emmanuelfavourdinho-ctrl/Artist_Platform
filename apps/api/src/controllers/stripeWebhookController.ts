@@ -127,7 +127,12 @@ async function processEvent(event: Stripe.Event): Promise<boolean> {
     await tx.webhookEvent.create({ data: { id: event.id, type: event.type } });
 
     if (isCheckoutEvent(event) && event.data.object.payment_status === 'paid') {
-      return fulfillCheckoutSession(tx, event.data.object);
+      return fulfillCheckoutSession(
+        tx,
+        event.data.object,
+        event.id,
+        Number.isSafeInteger(event.created) ? new Date(event.created * 1_000) : null,
+      );
     }
     if (event.type === 'checkout.session.completed' && event.data.object.status === 'complete') {
       await tx.checkoutIntent.updateMany({
@@ -191,6 +196,8 @@ async function expireCheckoutReservations(
 async function fulfillCheckoutSession(
   tx: Prisma.TransactionClient,
   session: Stripe.Checkout.Session,
+  sourceEventId: string,
+  occurredAt: Date | null,
 ): Promise<boolean> {
   const existingOrder = await tx.order.findUnique({
     where: { checkoutSessionId: session.id },
@@ -261,6 +268,7 @@ async function fulfillCheckoutSession(
     throw new Error(`Checkout session ${session.id} reservations do not match its buyer`);
   }
 
+  const verifiedAmountMinor = BigInt(session.amount_total);
   await claimActiveReservations(tx, reservations, 'CONVERTED');
 
   // New-policy sessions use aggregate order rounding and deterministic
@@ -325,6 +333,31 @@ async function fulfillCheckoutSession(
           paidAt: new Date(),
         },
       },
+    },
+  });
+
+  const providerObjectReference =
+    typeof session.payment_intent === 'string' ? session.payment_intent : session.id;
+  const payment = await tx.payment.findFirst({
+    where: { orderId: order.id, provider: 'stripe', providerPaymentId: providerObjectReference },
+    select: { id: true },
+  });
+  if (!payment) {
+    throw new Error(`Checkout session ${session.id} payment record was not created`);
+  }
+  await tx.financialActivity.create({
+    data: {
+      movementIdentifier: `stripe:checkout-payment-confirmed:${providerObjectReference}`,
+      movementType: 'CHECKOUT_PAYMENT_CONFIRMED',
+      amountMinorUnits: verifiedAmountMinor,
+      currency: currencyCode,
+      provider: 'stripe',
+      providerObjectReference,
+      orderId: order.id,
+      paymentId: payment.id,
+      occurredAt,
+      sourceEventId,
+      checkoutSessionId: session.id,
     },
   });
 

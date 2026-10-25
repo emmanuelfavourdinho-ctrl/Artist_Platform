@@ -62,7 +62,9 @@ import {
 import {
   listAdminOrdersQuerySchema,
   listAdminPaymentsQuerySchema,
+  listAdminFinancialActivitiesQuerySchema,
 } from '../validation/adminFinance.js';
+import { listAdminFinancialActivities } from '../controllers/adminFinancialActivityController.js';
 
 export const adminRouter = Router();
 
@@ -70,6 +72,12 @@ adminRouter.get('/session', requirePermission('admin.access'), getAdminSession);
 adminRouter.get('/overview', requirePermission('admin.access'), asyncHandler(getOverview));
 
 // Read-only order and payment inspection for Finance Admins and Admins.
+adminRouter.get(
+  '/financial-activities',
+  requirePermission('finance.view'),
+  validateQuery(listAdminFinancialActivitiesQuerySchema),
+  asyncHandler(listAdminFinancialActivities),
+);
 adminRouter.get(
   '/orders',
   requirePermission('finance.view'),

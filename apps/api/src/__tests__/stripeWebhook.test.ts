@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const harness = vi.hoisted(() => ({
   events: new Map<string, { id: string; type: string }>(),
   orders: new Map<string, { id: string; checkoutSessionId: string; data: any }>(),
+  payments: new Map<string, { id: string; orderId: string; data: any }>(),
+  financialActivities: new Map<string, any>(),
   reservations: [] as any[],
   inventory: new Map<string, { reservedQuantity: number; soldQuantity: number }>(),
   checkoutIntents: new Map<string, any>(),
   txTail: Promise.resolve() as Promise<void>,
   failInventoryOnce: false,
+  failFinancialActivityOnce: false,
   eventCreateError: null as Error | null,
   reservationUpdateLimit: null as number | null,
 }));
@@ -40,7 +43,31 @@ vi.mock('../lib/prisma.js', () => {
           data,
         };
         harness.orders.set(data.checkoutSessionId, order);
+        const paymentData = data.payments.create;
+        const paymentId = `payment-${harness.payments.size + 1}`;
+        harness.payments.set(paymentId, { id: paymentId, orderId: order.id, data: paymentData });
         return order;
+      }),
+    },
+    payment: {
+      findFirst: vi.fn(async ({ where }: any) =>
+        [...harness.payments.values()].find(
+          (payment) =>
+            payment.orderId === where.orderId &&
+            payment.data.provider === where.provider &&
+            payment.data.providerPaymentId === where.providerPaymentId,
+        ) ?? null,
+      ),
+    },
+    financialActivity: {
+      create: vi.fn(async ({ data }: any) => {
+        if (harness.failFinancialActivityOnce) {
+          harness.failFinancialActivityOnce = false;
+          throw new Error('financial activity write failed');
+        }
+        if (harness.financialActivities.has(data.movementIdentifier)) throw uniqueError();
+        harness.financialActivities.set(data.movementIdentifier, data);
+        return data;
       }),
     },
     inventoryReservation: {
@@ -108,6 +135,8 @@ vi.mock('../lib/prisma.js', () => {
 
       const eventsBefore = new Map(harness.events);
       const ordersBefore = new Map(harness.orders);
+      const paymentsBefore = new Map(harness.payments);
+      const activitiesBefore = new Map(harness.financialActivities);
       const reservationsBefore = structuredClone(harness.reservations);
       const inventoryBefore = new Map(
         [...harness.inventory].map(([id, row]) => [id, { ...row }]),
@@ -122,6 +151,10 @@ vi.mock('../lib/prisma.js', () => {
         for (const [id, event] of eventsBefore) harness.events.set(id, event);
         harness.orders.clear();
         for (const [id, order] of ordersBefore) harness.orders.set(id, order);
+        harness.payments.clear();
+        for (const [id, payment] of paymentsBefore) harness.payments.set(id, payment);
+        harness.financialActivities.clear();
+        for (const [id, activity] of activitiesBefore) harness.financialActivities.set(id, activity);
         harness.reservations = reservationsBefore;
         harness.inventory.clear();
         for (const [id, row] of inventoryBefore) harness.inventory.set(id, row);
@@ -144,6 +177,7 @@ function checkoutEvent(id: string, sessionId = 'cs_test_1') {
   return {
     id,
     type: 'checkout.session.completed',
+    created: 1791633600,
     data: {
       object: {
         id: sessionId,
@@ -178,6 +212,8 @@ async function deliver(event: any, signature = 'valid-signature') {
 beforeEach(() => {
   harness.events.clear();
   harness.orders.clear();
+  harness.payments.clear();
+  harness.financialActivities.clear();
   harness.inventory.clear();
   harness.checkoutIntents.clear();
   harness.reservations = [
@@ -202,6 +238,7 @@ beforeEach(() => {
   harness.inventory.set('artwork-1', { reservedQuantity: 1, soldQuantity: 0 });
   harness.txTail = Promise.resolve();
   harness.failInventoryOnce = false;
+  harness.failFinancialActivityOnce = false;
   harness.eventCreateError = null;
   harness.reservationUpdateLimit = null;
   harness.reservations[0].checkoutIntentId = 'intent-1';
@@ -258,6 +295,19 @@ describe('Stripe webhook fulfillment', () => {
       currency: 'USD',
       status: 'SUCCEEDED',
     });
+    expect(harness.financialActivities.get('stripe:checkout-payment-confirmed:pi_cs_test_1')).toMatchObject({
+      movementIdentifier: 'stripe:checkout-payment-confirmed:pi_cs_test_1',
+      movementType: 'CHECKOUT_PAYMENT_CONFIRMED',
+      amountMinorUnits: 12500n,
+      currency: 'USD',
+      provider: 'stripe',
+      providerObjectReference: 'pi_cs_test_1',
+      orderId: 'order-1',
+      paymentId: 'payment-1',
+      sourceEventId: 'evt_paid',
+      checkoutSessionId: 'cs_test_1',
+      occurredAt: new Date(1791633600 * 1_000),
+    });
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
     expect(harness.checkoutIntents.get('intent-1')?.status).toBe('PAID');
     expect(harness.reservations[0]).toMatchObject({ status: 'CONVERTED', orderId: 'order-1' });
@@ -293,6 +343,7 @@ describe('Stripe webhook fulfillment', () => {
     expect(repeated.body.duplicate).toBe(true);
     expect(harness.orders.size).toBe(1);
     expect(harness.events.size).toBe(1);
+    expect(harness.financialActivities.size).toBe(1);
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
   });
 
@@ -305,6 +356,7 @@ describe('Stripe webhook fulfillment', () => {
     expect([first.status, second.status]).toEqual([200, 200]);
     expect(harness.events.size).toBe(2);
     expect(harness.orders.size).toBe(1);
+    expect(harness.financialActivities.size).toBe(1);
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
   });
 
@@ -348,6 +400,8 @@ describe('Stripe webhook fulfillment', () => {
 
     harness.events.clear();
     harness.orders.clear();
+    harness.payments.clear();
+    harness.financialActivities.clear();
     harness.reservations[0].status = 'ACTIVE';
     harness.reservations[0].orderId = null;
     harness.reservations[0].artwork.price = 125;
@@ -414,6 +468,11 @@ describe('Stripe webhook fulfillment', () => {
       items: { create: [{ commissionAmount: '75', currency: 'XAF' }] },
       payments: { create: { currency: 'XAF', amount: '500' } },
     });
+    expect([...harness.financialActivities.values()]).toMatchObject([{
+      amountMinorUnits: 500n,
+      currency: 'XAF',
+      providerObjectReference: 'pi_cs_test_1',
+    }]);
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
   });
 
@@ -491,6 +550,27 @@ describe('Stripe webhook fulfillment', () => {
     expect(retry.status).toBe(200);
     expect(harness.events.size).toBe(1);
     expect(harness.orders.size).toBe(1);
+    expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
+  });
+
+  it('rolls back payment confirmation and retries safely when activity recording fails', async () => {
+    harness.failFinancialActivityOnce = true;
+    const event = checkoutEvent('evt_activity_retry');
+    const failed = await deliver(event);
+
+    expect(failed.status).toBe(500);
+    expect(harness.events.size).toBe(0);
+    expect(harness.orders.size).toBe(0);
+    expect(harness.payments.size).toBe(0);
+    expect(harness.financialActivities.size).toBe(0);
+    expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 1, soldQuantity: 0 });
+
+    const retried = await deliver(event);
+    expect(retried.status).toBe(200);
+    expect(harness.events.size).toBe(1);
+    expect(harness.orders.size).toBe(1);
+    expect(harness.payments.size).toBe(1);
+    expect(harness.financialActivities.size).toBe(1);
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
   });
 

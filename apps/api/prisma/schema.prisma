@@ -558,6 +558,7 @@ model Order {
   user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
   items         OrderItem[]
   payments      Payment[]
+  financialActivities FinancialActivity[]
   invoice       Invoice?
   shipment      Shipment?
   reservations  InventoryReservation[]
@@ -659,10 +660,41 @@ model Payment {
   updatedAt         DateTime      @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  financialActivities FinancialActivity[]
 
   @@index([orderId])
   @@index([providerPaymentId])
   @@index([status])
+}
+
+enum FinancialActivityType {
+  CHECKOUT_PAYMENT_CONFIRMED
+}
+
+model FinancialActivity {
+  id                      String               @id @default(uuid())
+  movementIdentifier     String               @unique
+  movementType           FinancialActivityType
+  amountMinorUnits       BigInt
+  currency               String
+  provider               String
+  providerObjectReference String
+  orderId                 String?
+  paymentId               String?
+  occurredAt              DateTime?
+  recordedAt              DateTime             @default(now())
+  sourceEventId           String
+  checkoutSessionId       String
+
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, movementType, providerObjectReference], map: "FinancialActivity_provider_type_objectRef_key")
+  @@index([recordedAt, id])
+  @@index([occurredAt])
+  @@index([currency, recordedAt])
+  @@index([orderId])
+  @@index([paymentId])
 }
 
 // Idempotency ledger for Stripe webhooks. Stripe may deliver the same

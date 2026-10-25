@@ -261,10 +261,29 @@ export interface AdminFinanceParams {
   page?: number;
   pageSize?: number;
   status?: string;
+  movementType?: string;
+  provider?: string;
   currency?: string;
   from?: string;
   to?: string;
   reference?: string;
+}
+
+export interface AdminFinancialActivity {
+  id: string;
+  movementIdentifier: string;
+  movementType: string;
+  amountMinorUnits: string;
+  amount: string;
+  currency: string;
+  provider: string;
+  providerObjectReference: string;
+  occurredAt: string | null;
+  recordedAt: string;
+  sourceEventId: string;
+  checkoutSessionId: string;
+  order: { id: string; orderNumber: string } | null;
+  payment: { id: string; status: string } | null;
 }
 
 export interface AdminOrderRow {
@@ -365,3 +384,8 @@ export const fetchAdminPayments = (params: AdminFinanceParams) =>
   adminRequest<AdminPaymentListRow[]>('GET', '/admin/payments', { query: { ...params, pageSize: params.pageSize ?? 20 } });
 
 export const fetchAdminPayment = (id: string) => adminGet<AdminPaymentDetail>(`/admin/payments/${id}`);
+
+export const fetchAdminFinancialActivities = (params: AdminFinanceParams) =>
+  adminRequest<AdminFinancialActivity[]>('GET', '/admin/financial-activities', {
+    query: { ...params, pageSize: params.pageSize ?? 20 },
+  });

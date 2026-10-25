@@ -60,7 +60,7 @@ const ADMIN_NAV: NavGroup[] = [
   {
     heading: 'Platform',
     items: [
-      { label: 'Financial Reports', permission: 'finance.view' },
+      { label: 'Financial Activity', href: '/admin/finance', permission: 'finance.view' },
       { label: 'Audit Logs', href: '/admin/audit-logs', permission: 'audit.view' },
     ],
   },
