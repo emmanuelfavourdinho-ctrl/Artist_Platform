@@ -127,6 +127,9 @@ model User {
   artistProfile                 ArtistProfile?
   cart                          Cart?
   orders                        Order[]
+  deliveryDisputes              DeliveryDispute[]
+  deliveryDisputesResolved       DeliveryDispute[]          @relation("DeliveryDisputeResolver")
+  orderDeliveryEvents            OrderDeliveryEvent[]
   favorites                     Favorite[]
   reviews                       Review[]
   commissionsRequested          CommissionRequest[]          @relation("BuyerCommissions")
@@ -268,6 +271,7 @@ model ArtistProfile {
   conversations         Conversation[]               @relation("ArtistConversations")
   communityPosts        CommunityPost[]              @relation("ArtistCommunityPosts")
   commissionProposals   CommissionProposal[]
+  orderFulfillments     ArtistOrderFulfillment[]
   verificationRequests  VerificationInfoRequest[]
   verificationDecisions ArtistVerificationDecision[]
 
@@ -535,6 +539,32 @@ enum OrderStatus {
   PARTIALLY_REFUNDED
 }
 
+enum PaymentReleaseStatus {
+  NOT_ELIGIBLE
+  ELIGIBLE
+  BLOCKED
+}
+
+enum DeliveryDisputeStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum OrderDeliveryEventType {
+  SHIPPED
+  TRACKING_UPDATED
+  ARTIST_COMPLETION_CONFIRMED
+  BUYER_RECEIPT_CONFIRMED
+  DELIVERY_DISPUTE_OPENED
+  DELIVERY_DISPUTE_RESOLVED
+  RELEASE_ELIGIBLE
+  RELEASE_BLOCKED
+  RELEASE_UNBLOCKED
+  RELEASE_HOLD_CHANGED
+  ARTIST_RESPONSE_WINDOW_EXPIRED
+}
+
 model Order {
   id                String      @id @default(uuid())
   userId            String
@@ -548,6 +578,13 @@ model Order {
   discountAmount Decimal @default(0) @db.Decimal(12, 2)
   totalAmount    Decimal @db.Decimal(12, 2)
   currency       String
+  buyerReceivedGoodAt DateTime?
+  artistResponseDeadline DateTime?
+  artistResponseWindowExpiredAt DateTime?
+  releaseStatus PaymentReleaseStatus @default(NOT_ELIGIBLE)
+  releaseEligibleAt DateTime?
+  releaseHoldAt DateTime?
+  releaseHoldReason String?
 
   shippingAddressSnapshot Json
   billingAddressSnapshot  Json
@@ -561,6 +598,9 @@ model Order {
   financialActivities FinancialActivity[]
   invoice       Invoice?
   shipment      Shipment?
+  artistFulfillments ArtistOrderFulfillment[]
+  deliveryDisputes DeliveryDispute[]
+  deliveryEvents OrderDeliveryEvent[]
   reservations  InventoryReservation[]
   conversations Conversation[]
 
@@ -794,6 +834,64 @@ model Shipment {
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([status])
+}
+
+model ArtistOrderFulfillment {
+  id                     String   @id @default(uuid())
+  orderId                String
+  artistId               String
+  carrier                String?
+  trackingReference      String?
+  trackingUrl            String?
+  evidenceReferences     String[] @default([])
+  shippedAt              DateTime?
+  artistCompletionConfirmedAt DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  order  Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  artist ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, artistId])
+  @@index([artistId, updatedAt])
+  @@index([orderId])
+}
+
+model DeliveryDispute {
+  id             String               @id @default(uuid())
+  orderId        String
+  buyerId        String
+  status         DeliveryDisputeStatus @default(OPEN)
+  reason         String
+  description    String
+  evidenceReferences String[]          @default([])
+  resolutionNote String?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  buyer    User   @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  resolver User?  @relation("DeliveryDisputeResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@index([orderId, status])
+  @@index([buyerId, createdAt])
+}
+
+model OrderDeliveryEvent {
+  id          String                @id @default(uuid())
+  orderId     String
+  actorId     String?
+  eventType   OrderDeliveryEventType
+  occurredAt  DateTime              @default(now())
+  metadata    Json?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, occurredAt])
+  @@index([actorId, occurredAt])
 }
 
 // ===========================================================================

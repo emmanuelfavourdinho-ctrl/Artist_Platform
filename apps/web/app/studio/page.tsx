@@ -94,6 +94,12 @@ function StudioContent() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          <a
+            href="/studio/orders"
+            className="px-6 py-3 border border-[rgb(var(--border)/0.2)] text-sm font-medium rounded-[var(--radius-sm)] transition hover:border-[rgb(var(--accent))]"
+          >
+            Orders
+          </a>
           <Link
             href="/studio/commissions"
             className="px-6 py-3 border border-[rgb(var(--border)/0.2)] text-sm font-medium rounded-[var(--radius-sm)] transition hover:border-[rgb(var(--accent))]"

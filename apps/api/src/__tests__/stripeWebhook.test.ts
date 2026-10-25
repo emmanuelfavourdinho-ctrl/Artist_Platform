@@ -6,6 +6,7 @@ const harness = vi.hoisted(() => ({
   orders: new Map<string, { id: string; checkoutSessionId: string; data: any }>(),
   payments: new Map<string, { id: string; orderId: string; data: any }>(),
   financialActivities: new Map<string, any>(),
+  artistFulfillments: new Map<string, { orderId: string; artistId: string }>(),
   reservations: [] as any[],
   inventory: new Map<string, { reservedQuantity: number; soldQuantity: number }>(),
   checkoutIntents: new Map<string, any>(),
@@ -58,6 +59,21 @@ vi.mock('../lib/prisma.js', () => {
             payment.data.providerPaymentId === where.providerPaymentId,
         ) ?? null,
       ),
+    },
+    artistOrderFulfillment: {
+      createMany: vi.fn(async ({ data, skipDuplicates }: any) => {
+        let count = 0;
+        for (const fulfillment of data) {
+          const key = `${fulfillment.orderId}:${fulfillment.artistId}`;
+          if (harness.artistFulfillments.has(key)) {
+            if (skipDuplicates) continue;
+            throw uniqueError();
+          }
+          harness.artistFulfillments.set(key, fulfillment);
+          count += 1;
+        }
+        return { count };
+      }),
     },
     financialActivity: {
       create: vi.fn(async ({ data }: any) => {
@@ -137,6 +153,7 @@ vi.mock('../lib/prisma.js', () => {
       const ordersBefore = new Map(harness.orders);
       const paymentsBefore = new Map(harness.payments);
       const activitiesBefore = new Map(harness.financialActivities);
+      const fulfillmentsBefore = new Map(harness.artistFulfillments);
       const reservationsBefore = structuredClone(harness.reservations);
       const inventoryBefore = new Map(
         [...harness.inventory].map(([id, row]) => [id, { ...row }]),
@@ -155,6 +172,10 @@ vi.mock('../lib/prisma.js', () => {
         for (const [id, payment] of paymentsBefore) harness.payments.set(id, payment);
         harness.financialActivities.clear();
         for (const [id, activity] of activitiesBefore) harness.financialActivities.set(id, activity);
+        harness.artistFulfillments.clear();
+        for (const [id, fulfillment] of fulfillmentsBefore) {
+          harness.artistFulfillments.set(id, fulfillment);
+        }
         harness.reservations = reservationsBefore;
         harness.inventory.clear();
         for (const [id, row] of inventoryBefore) harness.inventory.set(id, row);
@@ -214,6 +235,7 @@ beforeEach(() => {
   harness.orders.clear();
   harness.payments.clear();
   harness.financialActivities.clear();
+  harness.artistFulfillments.clear();
   harness.inventory.clear();
   harness.checkoutIntents.clear();
   harness.reservations = [
@@ -280,6 +302,9 @@ describe('Stripe webhook fulfillment', () => {
     expect(response.status).toBe(200);
     expect(harness.events.size).toBe(1);
     expect(harness.orders.size).toBe(1);
+    expect([...harness.artistFulfillments.values()]).toEqual([
+      { orderId: 'order-1', artistId: 'artist-1' },
+    ]);
     const order = harness.orders.get('cs_test_1')!;
     expect(order.data.checkoutSessionId).toBe('cs_test_1');
     expect(order.data.status).toBe('CONFIRMED');
@@ -544,6 +569,7 @@ describe('Stripe webhook fulfillment', () => {
     expect(first.status).toBe(500);
     expect(harness.events.size).toBe(0);
     expect(harness.orders.size).toBe(0);
+    expect(harness.artistFulfillments.size).toBe(0);
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 1, soldQuantity: 0 });
 
     const retry = await deliver(event);
@@ -563,6 +589,7 @@ describe('Stripe webhook fulfillment', () => {
     expect(harness.orders.size).toBe(0);
     expect(harness.payments.size).toBe(0);
     expect(harness.financialActivities.size).toBe(0);
+    expect(harness.artistFulfillments.size).toBe(0);
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 1, soldQuantity: 0 });
 
     const retried = await deliver(event);
@@ -571,6 +598,7 @@ describe('Stripe webhook fulfillment', () => {
     expect(harness.orders.size).toBe(1);
     expect(harness.payments.size).toBe(1);
     expect(harness.financialActivities.size).toBe(1);
+    expect(harness.artistFulfillments.size).toBe(1);
     expect(harness.inventory.get('artwork-1')).toEqual({ reservedQuantity: 0, soldQuantity: 1 });
   });
 

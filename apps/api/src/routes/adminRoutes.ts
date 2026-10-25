@@ -65,6 +65,15 @@ import {
   listAdminFinancialActivitiesQuerySchema,
 } from '../validation/adminFinance.js';
 import { listAdminFinancialActivities } from '../controllers/adminFinancialActivityController.js';
+import {
+  getAdminDeliveryDispute,
+  resolveDeliveryDispute,
+  setOrderReleaseHold,
+} from '../controllers/orderDeliveryController.js';
+import {
+  releaseHoldSchema,
+  resolveDeliveryDisputeSchema,
+} from '../validation/orderDelivery.js';
 
 export const adminRouter = Router();
 
@@ -92,6 +101,23 @@ adminRouter.get(
   asyncHandler(listAdminPayments),
 );
 adminRouter.get('/payments/:id', requirePermission('finance.view'), asyncHandler(getAdminPayment));
+adminRouter.get(
+  '/delivery-disputes/:disputeId',
+  requirePermission('reports.manage'),
+  asyncHandler(getAdminDeliveryDispute),
+);
+adminRouter.post(
+  '/delivery-disputes/:disputeId/decision',
+  requirePermission('reports.manage'),
+  validateBody(resolveDeliveryDisputeSchema),
+  asyncHandler(resolveDeliveryDispute),
+);
+adminRouter.patch(
+  '/orders/:orderId/release-hold',
+  requirePermission('reports.manage'),
+  validateBody(releaseHoldSchema),
+  asyncHandler(setOrderReleaseHold),
+);
 
 // Users, enforcement, roles, audit log
 adminRouter.get(

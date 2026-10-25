@@ -16,6 +16,7 @@ import {
 } from '../lib/money.js';
 import { PLATFORM_COMMISSION_BASIS_POINTS } from '../lib/financialPolicy.js';
 import { claimActiveReservations, releaseReservationGroup } from '../services/checkoutReservationTransitions.js';
+import { ensureArtistFulfillments } from '../services/orderDeliveryService.js';
 
 function isUniqueConstraintError(error: unknown): error is { code: 'P2002' } {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
@@ -335,6 +336,11 @@ async function fulfillCheckoutSession(
       },
     },
   });
+  await ensureArtistFulfillments(
+    tx,
+    order.id,
+    reservations.map((reservation) => reservation.artwork.artistId),
+  );
 
   const providerObjectReference =
     typeof session.payment_intent === 'string' ? session.payment_intent : session.id;
