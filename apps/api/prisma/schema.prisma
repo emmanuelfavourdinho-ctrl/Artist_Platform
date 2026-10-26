@@ -17,11 +17,9 @@ datasource db {
 //    generated, globally-unique identifier. Consistent across the whole
 //    schema; don't introduce auto-increment ints for a new model.
 //
-// 2. Money: every monetary field is `Decimal @db.Decimal(12, 2)`, never
-//    Float. Floats store money as an approximation ("0.1 + 0.2 != 0.3").
-//    IMPORTANT for API/frontend authors: Prisma serializes Decimal to
-//    JSON as a STRING, not a number — always `Number(value)` before
-//    formatting or doing arithmetic in TypeScript.
+// 2. Order and payment snapshots use `Decimal @db.Decimal(12, 2)`, never
+//    Float. Refund, payout, and financial activity amounts use integer
+//    minor units in BigInt fields. Floats store money approximately.
 //
 // 3. Currency codes (USD, EUR, XAF, ...) are plain `String`, not an enum —
 //    150+ real codes exist and Postgres enums need a migration to add a
@@ -130,6 +128,11 @@ model User {
   deliveryDisputes              DeliveryDispute[]
   deliveryDisputesResolved       DeliveryDispute[]          @relation("DeliveryDisputeResolver")
   orderDeliveryEvents            OrderDeliveryEvent[]
+  refundRequestsCreated         RefundRequest[]             @relation("RefundRequester")
+  refundRequestsDecided         RefundRequest[]             @relation("RefundDecider")
+  artistPayoutsRequested         ArtistPayout[]              @relation("PayoutRequester")
+  artistPayoutsDecided           ArtistPayout[]              @relation("PayoutDecider")
+  financialOperationEvents      FinancialOperationEvent[]
   favorites                     Favorite[]
   reviews                       Review[]
   commissionsRequested          CommissionRequest[]          @relation("BuyerCommissions")
@@ -272,6 +275,7 @@ model ArtistProfile {
   communityPosts        CommunityPost[]              @relation("ArtistCommunityPosts")
   commissionProposals   CommissionProposal[]
   orderFulfillments     ArtistOrderFulfillment[]
+  payouts               ArtistPayout[]
   verificationRequests  VerificationInfoRequest[]
   verificationDecisions ArtistVerificationDecision[]
 
@@ -601,6 +605,8 @@ model Order {
   artistFulfillments ArtistOrderFulfillment[]
   deliveryDisputes DeliveryDispute[]
   deliveryEvents OrderDeliveryEvent[]
+  refunds        RefundRequest[]
+  artistPayouts  ArtistPayout[]
   reservations  InventoryReservation[]
   conversations Conversation[]
 
@@ -701,6 +707,7 @@ model Payment {
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
   financialActivities FinancialActivity[]
+  refunds RefundRequest[]
 
   @@index([orderId])
   @@index([providerPaymentId])
@@ -709,6 +716,8 @@ model Payment {
 
 enum FinancialActivityType {
   CHECKOUT_PAYMENT_CONFIRMED
+  REFUND_CONFIRMED
+  ARTIST_PAYOUT_CONFIRMED
 }
 
 model FinancialActivity {
@@ -721,13 +730,17 @@ model FinancialActivity {
   providerObjectReference String
   orderId                 String?
   paymentId               String?
+  refundId                String?
+  payoutId                String?
   occurredAt              DateTime?
   recordedAt              DateTime             @default(now())
-  sourceEventId           String
-  checkoutSessionId       String
+  sourceEventId           String?
+  checkoutSessionId       String?
 
-  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  order   Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payment Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  refund  RefundRequest? @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  payout  ArtistPayout?  @relation(fields: [payoutId], references: [id], onDelete: SetNull)
 
   @@unique([provider, movementType, providerObjectReference], map: "FinancialActivity_provider_type_objectRef_key")
   @@index([recordedAt, id])
@@ -735,6 +748,140 @@ model FinancialActivity {
   @@index([currency, recordedAt])
   @@index([orderId])
   @@index([paymentId])
+  @@index([refundId])
+  @@index([payoutId])
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  SUBMITTED
+  PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_RECONCILIATION
+}
+
+enum ArtistPayoutStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  SUBMITTED
+  PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_RECONCILIATION
+}
+
+enum FinancialOperationEventType {
+  REQUESTED
+  APPROVED
+  REJECTED
+  SUBMITTED
+  PROVIDER_PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_RECONCILIATION
+  RETRY_AUTHORIZED
+}
+
+model RefundRequest {
+  id                    String       @id @default(uuid())
+  paymentId             String
+  orderId               String
+  requestedBy           String
+  decidedBy             String?
+  amountMinorUnits      BigInt
+  currency              String
+  reason                String
+  status                RefundStatus @default(REQUESTED)
+  idempotencyKey        String       @unique
+  provider              String?
+  providerReference     String?
+  providerEventId       String?
+  attemptCount          Int          @default(0)
+  lastAttemptAt         DateTime?
+  nextRetryAt           DateTime?
+  lastErrorCode         String?
+  decidedAt             DateTime?
+  submittedAt           DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  payment            Payment                   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  order              Order                     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  requester          User                      @relation("RefundRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
+  decider            User?                     @relation("RefundDecider", fields: [decidedBy], references: [id], onDelete: SetNull)
+  events             FinancialOperationEvent[]
+  financialActivities FinancialActivity[]
+
+  @@index([paymentId, status])
+  @@index([orderId, createdAt])
+  @@index([status, updatedAt])
+  @@index([provider, providerReference])
+}
+
+model ArtistPayout {
+  id                    String            @id @default(uuid())
+  fulfillmentId         String            @unique
+  orderId               String
+  artistId              String
+  requestedBy           String
+  decidedBy             String?
+  amountMinorUnits      BigInt
+  currency              String
+  commissionMinorUnits  BigInt
+  status                ArtistPayoutStatus @default(REQUESTED)
+  idempotencyKey        String            @unique
+  provider              String?
+  providerReference     String?
+  providerEventId       String?
+  attemptCount          Int               @default(0)
+  lastAttemptAt         DateTime?
+  nextRetryAt           DateTime?
+  lastErrorCode         String?
+  decidedAt             DateTime?
+  submittedAt           DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  fulfillment       ArtistOrderFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
+  order             Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  artist            ArtistProfile          @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  requester         User                   @relation("PayoutRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
+  decider           User?                  @relation("PayoutDecider", fields: [decidedBy], references: [id], onDelete: SetNull)
+  events            FinancialOperationEvent[]
+  financialActivities FinancialActivity[]
+
+  @@index([orderId, status])
+  @@index([artistId, createdAt])
+  @@index([status, updatedAt])
+  @@index([provider, providerReference])
+}
+
+model FinancialOperationEvent {
+  id                String                      @id @default(uuid())
+  refundRequestId   String?
+  artistPayoutId    String?
+  actorId           String?
+  eventType         FinancialOperationEventType
+  fromStatus        String?
+  toStatus          String
+  reason            String?
+  providerReference String?
+  metadata          Json?
+  occurredAt        DateTime                    @default(now())
+
+  refundRequest RefundRequest? @relation(fields: [refundRequestId], references: [id], onDelete: Restrict)
+  artistPayout  ArtistPayout?  @relation(fields: [artistPayoutId], references: [id], onDelete: Restrict)
+  actor         User?          @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([refundRequestId, occurredAt])
+  @@index([artistPayoutId, occurredAt])
+  @@index([actorId, occurredAt])
 }
 
 // Idempotency ledger for Stripe webhooks. Stripe may deliver the same
@@ -848,6 +995,7 @@ model ArtistOrderFulfillment {
   artistCompletionConfirmedAt DateTime?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
+  payout                 ArtistPayout?
 
   order  Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
   artist ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Restrict)
@@ -1052,6 +1200,7 @@ enum AuditAction {
   VERIFICATION_RESPONSE_SUBMITTED
   VERIFICATION_REQUEST_CANCELLED
   CONTACT_MESSAGE_STATUS_CHANGED
+  FINANCIAL_OPERATION_CHANGED
 }
 
 model AuditLog {

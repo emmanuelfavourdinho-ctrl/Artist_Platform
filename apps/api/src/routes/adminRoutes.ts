@@ -74,6 +74,32 @@ import {
   releaseHoldSchema,
   resolveDeliveryDisputeSchema,
 } from '../validation/orderDelivery.js';
+import {
+  createAdminPayout,
+  createAdminRefund,
+  decideAdminPayout,
+  decideAdminRefund,
+  getAdminPayout,
+  getAdminRefund,
+  listAdminEligiblePayouts,
+  listAdminPayouts,
+  listAdminRefunds,
+  reconcileAdminPayout,
+  reconcileAdminRefund,
+  retryAdminPayout,
+  retryAdminRefund,
+  submitAdminPayout,
+  submitAdminRefund,
+} from '../controllers/adminRefundPayoutController.js';
+import {
+  createArtistPayoutSchema,
+  createRefundSchema,
+  decideFinancialOperationSchema,
+  eligiblePayoutsQuerySchema,
+  listPayoutsQuerySchema,
+  listRefundsQuerySchema,
+  retryFinancialOperationSchema,
+} from '../validation/refundPayout.js';
 
 export const adminRouter = Router();
 
@@ -117,6 +143,82 @@ adminRouter.patch(
   requirePermission('reports.manage'),
   validateBody(releaseHoldSchema),
   asyncHandler(setOrderReleaseHold),
+);
+adminRouter.get(
+  '/refunds',
+  requirePermission('finance.view'),
+  validateQuery(listRefundsQuerySchema),
+  asyncHandler(listAdminRefunds),
+);
+adminRouter.get('/refunds/:id', requirePermission('finance.view'), asyncHandler(getAdminRefund));
+adminRouter.post(
+  '/refunds',
+  requirePermission('finance.refunds.manage'),
+  validateBody(createRefundSchema),
+  asyncHandler(createAdminRefund),
+);
+adminRouter.patch(
+  '/refunds/:id/decision',
+  requirePermission('finance.refunds.manage'),
+  validateBody(decideFinancialOperationSchema),
+  asyncHandler(decideAdminRefund),
+);
+adminRouter.post(
+  '/refunds/:id/retry',
+  requirePermission('finance.refunds.manage'),
+  validateBody(retryFinancialOperationSchema),
+  asyncHandler(retryAdminRefund),
+);
+adminRouter.post(
+  '/refunds/:id/submit',
+  requirePermission('finance.refunds.manage'),
+  asyncHandler(submitAdminRefund),
+);
+adminRouter.post(
+  '/refunds/:id/reconcile',
+  requirePermission('finance.refunds.manage'),
+  asyncHandler(reconcileAdminRefund),
+);
+adminRouter.get(
+  '/payouts/eligible',
+  requirePermission('finance.view'),
+  validateQuery(eligiblePayoutsQuerySchema),
+  asyncHandler(listAdminEligiblePayouts),
+);
+adminRouter.get(
+  '/payouts',
+  requirePermission('finance.view'),
+  validateQuery(listPayoutsQuerySchema),
+  asyncHandler(listAdminPayouts),
+);
+adminRouter.get('/payouts/:id', requirePermission('finance.view'), asyncHandler(getAdminPayout));
+adminRouter.post(
+  '/payouts',
+  requirePermission('finance.payouts.manage'),
+  validateBody(createArtistPayoutSchema),
+  asyncHandler(createAdminPayout),
+);
+adminRouter.patch(
+  '/payouts/:id/decision',
+  requirePermission('finance.payouts.manage'),
+  validateBody(decideFinancialOperationSchema),
+  asyncHandler(decideAdminPayout),
+);
+adminRouter.post(
+  '/payouts/:id/retry',
+  requirePermission('finance.payouts.manage'),
+  validateBody(retryFinancialOperationSchema),
+  asyncHandler(retryAdminPayout),
+);
+adminRouter.post(
+  '/payouts/:id/submit',
+  requirePermission('finance.payouts.manage'),
+  asyncHandler(submitAdminPayout),
+);
+adminRouter.post(
+  '/payouts/:id/reconcile',
+  requirePermission('finance.payouts.manage'),
+  asyncHandler(reconcileAdminPayout),
 );
 
 // Users, enforcement, roles, audit log

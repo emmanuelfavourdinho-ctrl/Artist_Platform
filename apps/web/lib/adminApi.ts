@@ -280,10 +280,66 @@ export interface AdminFinancialActivity {
   providerObjectReference: string;
   occurredAt: string | null;
   recordedAt: string;
-  sourceEventId: string;
-  checkoutSessionId: string;
+  sourceEventId: string | null;
+  checkoutSessionId: string | null;
   order: { id: string; orderNumber: string } | null;
   payment: { id: string; status: string } | null;
+}
+
+export type FinancialOperationStatus =
+  | 'REQUESTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SUBMITTED'
+  | 'PENDING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'MANUAL_RECONCILIATION';
+
+export interface AdminRefundOperation {
+  id: string;
+  paymentId: string;
+  amountMinorUnits: string;
+  currency: string;
+  reason: string;
+  status: FinancialOperationStatus;
+  provider: string | null;
+  providerReference: string | null;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  lastErrorCode: string | null;
+  createdAt: string;
+  order: { id: string; orderNumber: string };
+  payment: { status: string };
+}
+
+export interface AdminPayoutOperation {
+  id: string;
+  fulfillmentId: string;
+  orderId: string;
+  artistId: string;
+  amountMinorUnits: string;
+  commissionMinorUnits: string;
+  currency: string;
+  status: FinancialOperationStatus;
+  provider: string | null;
+  providerReference: string | null;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  lastErrorCode: string | null;
+  createdAt: string;
+  order: { id: string; orderNumber: string };
+}
+
+export interface EligibleAdminPayout {
+  fulfillmentId: string;
+  artistId: string;
+  artistName: string;
+  orderId: string;
+  orderNumber: string;
+  amountMinorUnits: string;
+  commissionMinorUnits: string;
+  currency: string;
 }
 
 export interface AdminOrderRow {
@@ -389,3 +445,56 @@ export const fetchAdminFinancialActivities = (params: AdminFinanceParams) =>
   adminRequest<AdminFinancialActivity[]>('GET', '/admin/financial-activities', {
     query: { ...params, pageSize: params.pageSize ?? 20 },
   });
+
+export const fetchAdminRefunds = (params: AdminFinanceParams = {}) =>
+  adminRequest<AdminRefundOperation[]>('GET', '/admin/refunds', {
+    query: { ...params, pageSize: params.pageSize ?? 20 },
+  });
+
+export const createAdminRefund = (body: {
+  paymentId: string;
+  amountMinorUnits: string;
+  reason: string;
+  idempotencyKey: string;
+}) => adminRequest<AdminRefundOperation>('POST', '/admin/refunds', { body });
+
+export const decideAdminRefund = (
+  id: string,
+  body: { decision: 'APPROVE' | 'REJECT'; reason: string },
+) => adminRequest<AdminRefundOperation>('PATCH', `/admin/refunds/${id}/decision`, { body });
+
+export const retryAdminRefund = (id: string, reason: string) =>
+  adminRequest<AdminRefundOperation>('POST', `/admin/refunds/${id}/retry`, { body: { reason } });
+
+export const submitAdminRefund = (id: string) =>
+  adminRequest<AdminRefundOperation>('POST', `/admin/refunds/${id}/submit`);
+
+export const reconcileAdminRefund = (id: string) =>
+  adminRequest<AdminRefundOperation>('POST', `/admin/refunds/${id}/reconcile`);
+
+export const fetchAdminPayouts = (params: AdminFinanceParams = {}) =>
+  adminRequest<AdminPayoutOperation[]>('GET', '/admin/payouts', {
+    query: { ...params, pageSize: params.pageSize ?? 20 },
+  });
+
+export const fetchEligibleAdminPayouts = (params: AdminFinanceParams = {}) =>
+  adminRequest<EligibleAdminPayout[]>('GET', '/admin/payouts/eligible', {
+    query: { ...params, pageSize: params.pageSize ?? 20 },
+  });
+
+export const createAdminPayout = (body: { fulfillmentId: string; idempotencyKey: string }) =>
+  adminRequest<AdminPayoutOperation>('POST', '/admin/payouts', { body });
+
+export const decideAdminPayout = (
+  id: string,
+  body: { decision: 'APPROVE' | 'REJECT'; reason: string },
+) => adminRequest<AdminPayoutOperation>('PATCH', `/admin/payouts/${id}/decision`, { body });
+
+export const retryAdminPayout = (id: string, reason: string) =>
+  adminRequest<AdminPayoutOperation>('POST', `/admin/payouts/${id}/retry`, { body: { reason } });
+
+export const submitAdminPayout = (id: string) =>
+  adminRequest<AdminPayoutOperation>('POST', `/admin/payouts/${id}/submit`);
+
+export const reconcileAdminPayout = (id: string) =>
+  adminRequest<AdminPayoutOperation>('POST', `/admin/payouts/${id}/reconcile`);

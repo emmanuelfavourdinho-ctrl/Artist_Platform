@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import type { Route } from 'next';
 import { useAdminSession } from '../../../components/admin/AdminSessionContext';
 import { EmptyBox, ErrorBox, PageHeader, Pagination } from '../../../components/admin/AdminUi';
 import {
@@ -101,9 +103,15 @@ export default function AdminFinancePage() {
       />
       <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-foreground/80">
         Checkout payment confirmation is not provider settlement or artist payout. This register
-        currently records verified checkout payment confirmations only; it does not infer fees,
-        refunds, disputes, settlements, or payouts.
+        records only movements confirmed by a provider response; it does not infer fees, refunds,
+        disputes, settlements, or payouts. No live refund or payout provider is configured.
       </p>
+      <Link
+        href={'/admin/finance/operations' as Route}
+        className="inline-flex rounded-md border border-accent px-4 py-2 text-sm text-accent hover:bg-accent/5"
+      >
+        View refund and payout operations
+      </Link>
 
       <form onSubmit={submitFilters} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <label className="flex flex-col gap-1 text-xs text-muted">
@@ -117,6 +125,8 @@ export default function AdminFinancePage() {
           >
             <option value="">All recorded types</option>
             <option value="CHECKOUT_PAYMENT_CONFIRMED">Checkout payment confirmed</option>
+            <option value="REFUND_CONFIRMED">Refund confirmed</option>
+            <option value="ARTIST_PAYOUT_CONFIRMED">Artist payout confirmed</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">

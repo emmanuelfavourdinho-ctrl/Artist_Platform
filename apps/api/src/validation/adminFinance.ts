@@ -64,7 +64,11 @@ export const listAdminPaymentsQuerySchema = z
 export const listAdminFinancialActivitiesQuerySchema = z
   .object({
     ...dateRange,
-    movementType: z.enum(['CHECKOUT_PAYMENT_CONFIRMED']).optional(),
+    movementType: z.enum([
+      'CHECKOUT_PAYMENT_CONFIRMED',
+      'REFUND_CONFIRMED',
+      'ARTIST_PAYOUT_CONFIRMED',
+    ]).optional(),
     provider: z.string().trim().min(1).max(64).optional(),
   })
   .refine(validDateRange, {

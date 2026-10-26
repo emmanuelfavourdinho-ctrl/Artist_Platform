@@ -26,6 +26,8 @@ export const PERMISSIONS = [
   'support.manage',
   'audit.view',
   'finance.view',
+  'finance.refunds.manage',
+  'finance.payouts.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -48,7 +50,12 @@ const ROLE_PERMISSIONS: Record<string, readonly Permission[]> = {
     'support.manage',
     'audit.view',
   ],
-  FINANCE_ADMIN: ['admin.access', 'finance.view'],
+  FINANCE_ADMIN: [
+    'admin.access',
+    'finance.view',
+    'finance.refunds.manage',
+    'finance.payouts.manage',
+  ],
 };
 
 export function permissionsForRoles(roles: readonly string[]): Set<Permission> {
