@@ -50,11 +50,15 @@ export function ArtistWorksGrid({
               Sold
             </span>
           ) : null}
-          <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4">
-            <p className="font-display text-base text-foreground">{artwork.title}</p>
-            <span className="shrink-0 rounded-full border border-foreground/20 bg-background/60 px-2.5 py-1 text-[11px] font-medium text-foreground backdrop-blur-sm">
-              {formatListingPrice(artwork.price, artwork.currency)}
-            </span>
+          <div className="absolute inset-x-0 bottom-0 p-4">
+            <div className="flex items-end justify-between gap-2">
+              <p className="font-display text-base text-foreground">{artwork.title}</p>
+              <span className="shrink-0 rounded-full border border-foreground/20 bg-background/60 px-2.5 py-1 text-[11px] font-medium text-foreground backdrop-blur-sm">
+                {formatListingPrice(artwork.price, artwork.currency)}
+              </span>
+            </div>
+            {artwork.description && <p className="mt-2 line-clamp-2 text-xs leading-5 text-foreground/70">{artwork.description}</p>}
+            <p className="mt-2 text-[10px] uppercase tracking-[.14em] text-accent">{artwork.available ? 'View artwork' : 'View details'}</p>
           </div>
         </Link>
       ))}

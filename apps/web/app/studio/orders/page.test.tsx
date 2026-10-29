@@ -17,6 +17,9 @@ const {
 vi.mock('@/components/auth/ProtectedRoute', () => ({
   ProtectedRoute: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+vi.mock('@/components/studio/StudioShell', () => ({
+  StudioShell: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
 vi.mock('@/lib/studioOrdersApi', () => ({
   confirmArtistOrderCompletion,
   correctShipmentTracking,
@@ -35,12 +38,15 @@ const fulfillment = (overrides: Record<string, unknown> = {}) => ({
   shippedAt: null,
   artistCompletionConfirmedAt: null,
   order: {
+    id: 'order-1',
     orderNumber: 'ART-1234',
     status: 'CONFIRMED',
     createdAt: '2026-10-10T12:00:00.000Z',
     buyerReceivedGoodAt: null,
     artistResponseDeadline: null,
     releaseStatus: 'NOT_ELIGIBLE',
+    items: [{ id: 'item-1', title: 'Blue Study', quantity: 1, price: '100.00', currency: 'USD' }],
+    deliveryDisputes: [],
   },
   ...overrides,
 });

@@ -1,9 +1,9 @@
 'use client';
 
 import { Suspense, useEffect, type ReactNode } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
-import { resolveAuthDestination } from '../../lib/authRouting';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -12,7 +12,7 @@ interface ProtectedRouteProps {
 }
 
 function ProtectedRouteInner({ children, allowRoles }: ProtectedRouteProps) {
-  const { appUser, artistProfile, loading, error } = useAuth();
+  const { firebaseUser, appUser, loading, error, refresh, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -24,27 +24,21 @@ function ProtectedRouteInner({ children, allowRoles }: ProtectedRouteProps) {
     // who ARE logged in.
     if (loading) return;
 
-    if (!appUser) {
+    if (firebaseUser && (error || !appUser)) return;
+    if (!firebaseUser) {
       // Preserve exactly what the person was trying to reach — e.g.
       // /commissions/request?artistId=... — so login/register can send
       // them straight back instead of dropping them on a generic home.
       const query = searchParams.toString();
       const intended = query ? `${pathname}?${query}` : pathname;
-      router.replace(`/login?redirect=${encodeURIComponent(intended)}` as any);
+      const action = pathname.startsWith('/messages')
+        ? 'message'
+        : pathname.startsWith('/commissions/request') ? 'commission' : null;
+      const actionQuery = action ? `&action=${action}` : '';
+      router.replace(`/login?redirect=${encodeURIComponent(intended)}${actionQuery}` as any);
       return;
     }
-    if (allowRoles && !appUser.roles.some((r) => allowRoles.includes(r))) {
-      // Logged in, but wrong role — send to their own correct home
-      // rather than a scary blank error page.
-      router.replace(
-        resolveAuthDestination({
-          status: 'ok',
-          user: appUser,
-          artistProfile: artistProfile ?? { exists: false, isComplete: false, slug: null },
-        }),
-      );
-    }
-  }, [loading, appUser, allowRoles, router, pathname, searchParams]);
+  }, [loading, firebaseUser, appUser, error, router, pathname, searchParams]);
 
   if (loading)
     return (
@@ -52,14 +46,30 @@ function ProtectedRouteInner({ children, allowRoles }: ProtectedRouteProps) {
         Loading…
       </div>
     );
-  if (error)
+  if (error || (firebaseUser && !appUser))
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-red-600">
-        We couldn&apos;t load your account. Please refresh.
-      </div>
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center px-6 text-center">
+        <h1 className="font-display text-2xl text-foreground">We couldn&apos;t verify your account</h1>
+        <p className="mt-3 text-sm text-muted">Your sign-in is still active, but your account details could not be loaded. Check your connection and try again.</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-4">
+          <button type="button" onClick={() => void refresh()} className="min-h-11 rounded-md bg-accent px-5 text-sm font-medium text-background">Try again</button>
+          <button type="button" onClick={() => void signOut()} className="min-h-11 px-4 text-sm text-accent underline underline-offset-2">Sign out</button>
+        </div>
+      </main>
     );
+  if (!firebaseUser) return null;
   if (!appUser) return null;
-  if (allowRoles && !appUser.roles.some((r) => allowRoles.includes(r))) return null;
+  if (allowRoles && !appUser.roles.some((r) => allowRoles.includes(r)))
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center px-6 text-center">
+        <h1 className="font-display text-2xl text-foreground">This area isn&apos;t available for this account</h1>
+        <p className="mt-3 text-sm text-muted">Your account is signed in, but it does not have permission to view this page.</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-4">
+          <Link href="/account" className="min-h-11 rounded-md bg-accent px-5 py-3 text-sm font-medium text-background">Go to account</Link>
+          <Link href="/gallery" className="min-h-11 px-4 py-3 text-sm text-accent underline underline-offset-2">Browse gallery</Link>
+        </div>
+      </main>
+    );
 
   return <>{children}</>;
 }

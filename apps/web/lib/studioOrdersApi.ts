@@ -11,12 +11,27 @@ export interface ArtistOrderFulfillmentView {
   shippedAt: string | null;
   artistCompletionConfirmedAt: string | null;
   order: {
+    id: string;
     orderNumber: string;
     status: string;
     createdAt: string;
     buyerReceivedGoodAt: string | null;
     artistResponseDeadline: string | null;
     releaseStatus: string;
+    items: Array<{ id: string; title: string; quantity: number; price: string; currency: string }>;
+    deliveryDisputes: Array<{
+      id: string;
+      status: string;
+      reason: string;
+      description: string;
+      evidenceReferences: string[];
+      artistResponse: string | null;
+      artistEvidenceReferences: string[];
+      artistRespondedAt: string | null;
+      resolutionNote: string | null;
+      resolvedAt: string | null;
+      createdAt: string;
+    }>;
   };
 }
 

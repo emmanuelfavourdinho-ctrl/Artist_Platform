@@ -16,12 +16,14 @@ vi.mock('../services/orderDeliveryService.js', () => ({
   updateReleaseEligibility: vi.fn(),
 }));
 
-vi.mock('../services/auditService.js', () => ({ recordAudit: vi.fn() }));
+const audit = vi.hoisted(() => ({ recordAudit: vi.fn() }));
+vi.mock('../services/auditService.js', () => audit);
 
 import {
   confirmBuyerReceipt,
   getArtistOrderFulfillment,
   getBuyerOrderDelivery,
+  respondToArtistDeliveryDispute,
 } from './orderDeliveryController.js';
 import { prisma } from '../lib/prisma.js';
 import {
@@ -30,6 +32,7 @@ import {
   notifyOrderParties,
   updateReleaseEligibility,
 } from '../services/orderDeliveryService.js';
+import { recordAudit } from '../services/auditService.js';
 
 const ORDER_ID = '11111111-1111-4111-8111-111111111111';
 const BUYER_ID = '22222222-2222-4222-8222-222222222222';
@@ -117,5 +120,91 @@ describe('order delivery controller ownership checks', () => {
     expect(json).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ releaseStatus: 'NOT_ELIGIBLE' }),
     }));
+  });
+
+  it('records an authorized artist dispute response without resolving the dispute or enabling release', async () => {
+    const dispute = {
+      id: '44444444-4444-4444-8444-444444444444',
+      orderId: ORDER_ID,
+      status: 'OPEN',
+      artistResponse: null,
+      artistEvidenceReferences: [],
+      artistRespondedAt: null,
+    };
+    const tx = {
+      artistProfile: { findUnique: vi.fn().mockResolvedValue({ id: ARTIST_ID }) },
+      deliveryDispute: {
+        findUnique: vi.fn().mockResolvedValue({ id: dispute.id, orderId: ORDER_ID }),
+        findFirst: vi.fn().mockResolvedValue(dispute),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(tx as never));
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn();
+
+    await respondToArtistDeliveryDispute({
+      params: { disputeId: dispute.id },
+      user: { id: BUYER_ID },
+      body: { response: 'The parcel was shipped with the listed carrier.', evidenceReferences: ['proof-ref'] },
+    } as never, { status, json } as never);
+
+    expect(lockOrderForDelivery).toHaveBeenCalledWith(tx, ORDER_ID);
+    expect(tx.deliveryDispute.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: dispute.id, orderId: ORDER_ID, order: { items: { some: { artistId: ARTIST_ID } } } },
+    }));
+    expect(tx.deliveryDispute.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: dispute.id, status: 'OPEN', artistRespondedAt: null },
+      data: expect.objectContaining({
+        artistResponse: 'The parcel was shipped with the listed carrier.',
+        artistEvidenceReferences: ['proof-ref'],
+      }),
+    }));
+    expect(appendDeliveryEvent).toHaveBeenCalledWith(tx, expect.objectContaining({
+      eventType: 'ARTIST_DISPUTE_RESPONSE_SUBMITTED',
+    }));
+    expect(recordAudit).toHaveBeenCalledOnce();
+    expect(notifyOrderParties).toHaveBeenCalledOnce();
+    expect(updateReleaseEligibility).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledWith(201);
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ duplicate: false }),
+    }));
+  });
+
+  it('returns a duplicate response idempotently without another event', async () => {
+    const respondedAt = new Date('2026-10-26T00:00:00.000Z');
+    const tx = {
+      artistProfile: { findUnique: vi.fn().mockResolvedValue({ id: ARTIST_ID }) },
+      deliveryDispute: {
+        findUnique: vi.fn().mockResolvedValue({ id: '44444444-4444-4444-8444-444444444444', orderId: ORDER_ID }),
+        findFirst: vi.fn().mockResolvedValue({
+          id: '44444444-4444-4444-8444-444444444444',
+          orderId: ORDER_ID,
+          status: 'OPEN',
+          artistResponse: 'The parcel was shipped with the listed carrier.',
+          artistEvidenceReferences: ['proof-ref'],
+          artistRespondedAt: respondedAt,
+        }),
+        updateMany: vi.fn(),
+      },
+    };
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(tx as never));
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn();
+
+    await respondToArtistDeliveryDispute({
+      params: { disputeId: '44444444-4444-4444-8444-444444444444' },
+      user: { id: BUYER_ID },
+      body: { response: 'The parcel was shipped with the listed carrier.', evidenceReferences: ['proof-ref'] },
+    } as never, { status, json } as never);
+
+    expect(tx.deliveryDispute.updateMany).not.toHaveBeenCalled();
+    expect(appendDeliveryEvent).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledWith(200);
+    expect(json).toHaveBeenCalledWith({
+      status: 'success',
+      data: { id: '44444444-4444-4444-8444-444444444444', respondedAt, duplicate: true },
+    });
   });
 });

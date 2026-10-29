@@ -114,7 +114,7 @@ export function ArtworkActions({
               : 'Sold'
             : inCart
               ? 'In Cart'
-              : 'Add to Cart'}
+              : 'Buy Artwork'}
         </button>
 
         <button

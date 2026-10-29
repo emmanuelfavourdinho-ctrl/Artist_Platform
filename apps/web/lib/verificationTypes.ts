@@ -120,6 +120,11 @@ export interface ArtistRequest {
 
 export interface OwnVerification {
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
+  latestDecision: {
+    decision: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
+    reason: string | null;
+    createdAt: string;
+  } | null;
   activeRequest: ArtistRequest | null;
   history: ArtistRequest[];
 }

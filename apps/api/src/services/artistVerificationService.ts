@@ -429,14 +429,22 @@ export async function getOwnVerification(userId: string) {
   });
   if (!artist) throw new HttpError(404, 'Artist profile not found', { code: 'ARTIST_PROFILE_NOT_FOUND' });
 
-  const requests = await prisma.verificationInfoRequest.findMany({
-    where: { artistId: artist.id },
-    orderBy: { round: 'desc' },
-    select: artistRequestSelect,
-  });
+  const [requests, latestDecision] = await Promise.all([
+    prisma.verificationInfoRequest.findMany({
+      where: { artistId: artist.id },
+      orderBy: { round: 'desc' },
+      select: artistRequestSelect,
+    }),
+    prisma.artistVerificationDecision.findFirst({
+      where: { artistId: artist.id },
+      orderBy: { createdAt: 'desc' },
+      select: { decision: true, reason: true, createdAt: true },
+    }),
+  ]);
 
   return {
     verificationStatus: artist.verificationStatus,
+    latestDecision,
     activeRequest: requests.find((r) => OPEN.includes(r.status)) ?? null,
     history: requests.filter((r) => !OPEN.includes(r.status)),
   };

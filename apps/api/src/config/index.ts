@@ -5,33 +5,6 @@ import { z } from 'zod';
 // never reads a developer's real `.env` file.
 dotenv.config({ path: process.env.DOTENV_CONFIG_PATH ?? '.env' });
 
-/*
-  Explainer: JWT_SECRET is the "master key" our server uses to sign
-  admin login tokens — anyone who obtains this exact string could forge
-  a fake "I am the admin" token, so it must be long, random, and never
-  committed to GitHub (it lives only in .env, which .gitignore already
-  excludes). Unlike DATABASE_URL above, we do NOT give this a fallback
-  default — z.string().min(32) below means the server refuses to start
-  at all if this isn't set to something reasonably long. That's
-  deliberate: a missing secret should be a loud startup crash, never a
-  silent "oh well, I'll use something weak instead."
-
-  COOKIE_SECRET follows the exact same philosophy and is deliberately a
-  SEPARATE secret from JWT_SECRET — signing admin cookies and signing
-  admin JWTs are different trust boundaries, and reusing one secret for
-  both means a leak of either purpose compromises both.
-
-  FIREBASE_SERVICE_ACCOUNT_BASE64 follows the same "loud crash, not
-  silent fallback" philosophy — Firebase Admin literally cannot verify
-  tokens without it, so a missing value should fail at startup, not at
-  the first real login attempt in production. It's base64-encoded
-  (the whole downloaded service account JSON, encoded as one string)
-  rather than split into PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY fields —
-  a raw multi-line PEM private key inside a single .env line is
-  extremely easy for Windows editors/terminals to corrupt (mismatched
-  quotes, mangled \n escapes, wrong file encoding). Base64 has no
-  characters those tools ever touch.
-*/
 const isTestEnvironment = process.env.NODE_ENV === 'test';
 
 const envSchema = z.object({
@@ -56,6 +29,10 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+  WEBRTC_STUN_URLS: z.string().optional().default(''),
+  WEBRTC_TURN_URLS: z.string().optional().default(''),
+  WEBRTC_TURN_SHARED_SECRET: z.string().min(32).optional(),
+  WEBRTC_TURN_CREDENTIAL_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
 
   FIREBASE_SERVICE_ACCOUNT_BASE64: isTestEnvironment
     ? z
@@ -64,14 +41,6 @@ const envSchema = z.object({
         .default('eyJ0ZW1wbGF0ZSI6InRlc3QifQ==')
     : z.string().min(1, 'FIREBASE_SERVICE_ACCOUNT_BASE64 is required'),
 
-  // Set TRUST_PROXY explicitly to override the production-only default
-  // below — e.g. TRUST_PROXY=false if you're running behind something
-  // that already strips/rewrites X-Forwarded-For, or TRUST_PROXY=true
-  // to trust it in a non-production environment for testing.
-  // NOTE: deliberately z.enum(['true','false']) rather than
-  // z.coerce.boolean() — Zod's boolean coercion is just Boolean(value),
-  // so the string "false" (non-empty) would coerce to `true`. An enum
-  // avoids that trap entirely.
   TRUST_PROXY: z.enum(['true', 'false']).optional(),
 
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
@@ -106,6 +75,16 @@ export const config = {
     cloudName: env.CLOUDINARY_CLOUD_NAME,
     apiKey: env.CLOUDINARY_API_KEY,
     apiSecret: env.CLOUDINARY_API_SECRET,
+  },
+  webrtc: {
+    stunUrls: env.WEBRTC_STUN_URLS.split(',')
+      .map((url) => url.trim())
+      .filter(Boolean),
+    turnUrls: env.WEBRTC_TURN_URLS.split(',')
+      .map((url) => url.trim())
+      .filter(Boolean),
+    turnSharedSecret: env.WEBRTC_TURN_SHARED_SECRET,
+    turnCredentialTtlSeconds: env.WEBRTC_TURN_CREDENTIAL_TTL_SECONDS,
   },
   firebase: {
     serviceAccountBase64: env.FIREBASE_SERVICE_ACCOUNT_BASE64,

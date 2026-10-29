@@ -31,7 +31,9 @@ export function VerificationTaskBanner() {
 
   if (data.verificationStatus === 'REJECTED') {
     heading = 'Your verification was not approved';
-    body = 'Contact support if you would like to know more.';
+    body = data.latestDecision?.reason
+      ? `Reason: ${data.latestDecision.reason}`
+      : 'Resubmission is not currently available. Contact support if you have questions.';
     cta = { href: '/studio/verification', label: 'View details' };
   } else if (active?.status === 'AWAITING_ARTIST_INPUT') {
     heading = 'Action needed: more information required';
@@ -42,8 +44,10 @@ export function VerificationTaskBanner() {
     body = `${REQUEST_STATUS.AWAITING_REVIEW.artist}. We will let you know the outcome.`;
     cta = { href: `/studio/verification/${active.id}`, label: 'View your response' };
   } else {
-    heading = 'Verification pending';
-    body = 'Your profile is being reviewed. You can keep preparing your profile and draft artwork in the meantime.';
+    heading = data.history.length === 0 ? 'Verification not submitted' : 'No active verification request';
+    body = data.history.length === 0
+      ? 'Your review has not started. Contact support if you expected a request from our team.'
+      : 'There is no open information request. Contact support if you need help with the next step.';
     cta = { href: '/studio/verification', label: 'Learn more' };
   }
 

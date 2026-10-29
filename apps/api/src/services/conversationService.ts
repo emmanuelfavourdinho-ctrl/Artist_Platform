@@ -35,7 +35,7 @@ export async function findOrCreateConversation(params: FindOrCreateConversationP
   } = params;
 
   const existing = await prisma.conversation.findFirst({
-    where: { buyerId, artistId, commissionRequestId },
+    where: { buyerId, artistId, commissionRequestId, artworkId, orderId },
     include: conversationInclude,
   });
   if (existing) return existing;

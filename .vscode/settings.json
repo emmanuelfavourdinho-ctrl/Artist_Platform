@@ -11,5 +11,6 @@
     "**/node_modules": true
   },
   "eslint.validate": ["javascript", "typescript", "typescriptreact", "javascriptreact"],
-  "cSpell.words": ["favorited", "Fraunces", "artworksApi"]
+  "cSpell.words": ["favorited", "Fraunces", "artworksApi"],
+  "prisma.pinToPrisma6": true
 }

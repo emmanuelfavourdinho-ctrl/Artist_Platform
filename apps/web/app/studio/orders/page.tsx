@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { StudioShell } from '@/components/studio/StudioShell';
 import {
   confirmArtistOrderCompletion,
   correctShipmentTracking,
@@ -15,6 +16,7 @@ function ArtistOrdersContent() {
   const [orders, setOrders] = useState<ArtistOrderFulfillmentView[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState('');
   const [forms, setForms] = useState<Record<string, {
     carrier: string;
     trackingReference: string;
@@ -52,6 +54,7 @@ function ArtistOrdersContent() {
     const form = values(order);
     setBusy(order.orderId);
     setError('');
+    setFeedback('');
     try {
       if (order.shippedAt) {
         await correctShipmentTracking({
@@ -70,6 +73,7 @@ function ArtistOrdersContent() {
         });
       }
       await load();
+      setFeedback(order.shippedAt ? 'Tracking correction saved and recorded.' : 'Shipment details saved for the buyer.');
     } catch {
       setError('Shipment information could not be saved. Please reload and try again.');
     } finally {
@@ -80,9 +84,11 @@ function ArtistOrdersContent() {
   const confirmCompletion = async (orderId: string) => {
     setBusy(orderId);
     setError('');
+    setFeedback('');
     try {
       await confirmArtistOrderCompletion(orderId);
       await load();
+      setFeedback('Your fulfillment completion was recorded. The buyer still needs to confirm receipt.');
     } catch {
       setError('Completion could not be confirmed. Please reload and try again.');
     } finally {
@@ -91,15 +97,16 @@ function ArtistOrdersContent() {
   };
 
   return (
-    <main className="min-h-screen bg-[rgb(var(--background))] px-[var(--container-gutter)] py-12 text-[rgb(var(--foreground))]">
-      <header className="mb-8 border-b border-[rgb(var(--border)/0.12)] pb-6">
-        <Link href="/studio" className="text-sm underline">Artist Studio</Link>
-        <h1 className="mt-3 font-['Fraunces'] text-4xl">Order Fulfillments</h1>
+    <StudioShell>
+      <header className="mb-8 border-b border-border/10 pb-6">
+        <p className="text-xs uppercase tracking-[.18em] text-accent">Orders & delivery</p>
+        <h1 className="mt-2 font-display text-4xl">Your orders</h1>
         <p className="mt-2 text-sm text-[rgb(var(--muted))]">
           Confirming completion does not authorize payment release or indicate that a payout was sent.
         </p>
       </header>
       {error && <p role="alert" className="mb-4 text-sm text-red-600">{error}</p>}
+      {feedback && <p role="status" className="mb-4 text-sm text-emerald-400">{feedback}</p>}
       {orders === null ? (
         <p aria-busy="true">Loading orders…</p>
       ) : orders.length === 0 ? (
@@ -114,6 +121,13 @@ function ArtistOrdersContent() {
                   <h2 className="font-mono">{order.order.orderNumber}</h2>
                   <span>{order.order.status}</span>
                 </div>
+                <ul className="divide-y divide-border/10 border-y border-border/10">
+                  {order.order.items.map((item) => (
+                    <li key={item.id} className="py-2 text-sm">
+                      {item.title} · Qty {item.quantity} · {item.currency} {item.price}
+                    </li>
+                  ))}
+                </ul>
                 <p className="text-sm">
                   Payment release eligibility: {order.order.releaseStatus}. Eligibility is not settlement or payout.
                 </p>
@@ -123,6 +137,13 @@ function ArtistOrdersContent() {
                 {order.order.buyerReceivedGoodAt && (
                   <p className="text-sm">Buyer confirmed receipt: {new Date(order.order.buyerReceivedGoodAt).toLocaleString()}</p>
                 )}
+                {order.order.deliveryDisputes.filter((dispute) => dispute.status === 'OPEN').map((dispute) => (
+                  <div key={dispute.id} className="border-l-2 border-amber-500 px-4 py-2 text-sm">
+                    <p className="font-medium">Open delivery issue · {dispute.reason.replaceAll('_', ' ')}</p>
+                    <p className="mt-1 text-muted">{dispute.description}</p>
+                    <Link href="/studio/support" className="mt-2 inline-block text-accent underline">View issue and response options</Link>
+                  </div>
+                ))}
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="text-sm">Carrier
                     <input required value={form.carrier} onChange={(event) => update(order.orderId, 'carrier', event.target.value)} className="mt-1 w-full rounded border bg-transparent p-2" />
@@ -166,7 +187,7 @@ function ArtistOrdersContent() {
           })}
         </div>
       )}
-    </main>
+    </StudioShell>
   );
 }
 

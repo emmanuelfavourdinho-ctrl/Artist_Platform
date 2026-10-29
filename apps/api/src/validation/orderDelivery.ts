@@ -40,6 +40,11 @@ export const resolveDeliveryDisputeSchema = z.object({
   resolutionNote: z.string().trim().min(10).max(1_000),
 });
 
+export const artistDisputeResponseSchema = z.object({
+  response: z.string().trim().min(10).max(2_000),
+  evidenceReferences,
+});
+
 export const releaseHoldSchema = z.object({
   held: z.boolean(),
   reason: z.string().trim().min(10).max(500),
@@ -49,3 +54,4 @@ export type ShipOrderInput = z.infer<typeof shipOrderSchema>;
 export type UpdateTrackingInput = z.infer<typeof updateTrackingSchema>;
 export type CreateDeliveryDisputeInput = z.infer<typeof createDeliveryDisputeSchema>;
 export type ResolveDeliveryDisputeInput = z.infer<typeof resolveDeliveryDisputeSchema>;
+export type ArtistDisputeResponseInput = z.infer<typeof artistDisputeResponseSchema>;

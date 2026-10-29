@@ -12,6 +12,7 @@ import {
   updateReleaseEligibility,
 } from '../services/orderDeliveryService.js';
 import type {
+  ArtistDisputeResponseInput,
   CreateDeliveryDisputeInput,
   ResolveDeliveryDisputeInput,
   ShipOrderInput,
@@ -206,17 +207,188 @@ export async function listArtistOrderFulfillments(req: Request, res: Response): 
       artistCompletionConfirmedAt: true,
       order: {
         select: {
+          id: true,
           orderNumber: true,
           status: true,
           createdAt: true,
           buyerReceivedGoodAt: true,
           artistResponseDeadline: true,
           releaseStatus: true,
+          items: {
+            where: { artistId: artist.id },
+            select: { id: true, titleSnapshot: true, quantity: true, unitPrice: true, currency: true },
+          },
+          deliveryDisputes: {
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              status: true,
+              reason: true,
+              description: true,
+              evidenceReferences: true,
+              artistResponse: true,
+              artistEvidenceReferences: true,
+              artistRespondedAt: true,
+              resolutionNote: true,
+              resolvedAt: true,
+              createdAt: true,
+            },
+          },
         },
       },
     },
   });
-  res.json({ status: 'success', data: fulfillments });
+  res.json({
+    status: 'success',
+    data: fulfillments.map((fulfillment) => ({
+      ...fulfillment,
+      order: {
+        ...fulfillment.order,
+        items: fulfillment.order.items.map((item) => ({
+          id: item.id,
+          title: item.titleSnapshot,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          currency: item.currency,
+        })),
+      },
+    })),
+  });
+}
+
+export async function listArtistDeliveryDisputes(req: Request, res: Response): Promise<void> {
+  const artist = await prisma.artistProfile.findUnique({
+    where: { userId: req.user!.id },
+    select: { id: true },
+  });
+  if (!artist) throw new HttpError(403, 'Artist profile required', { code: 'ARTIST_REQUIRED' });
+  const disputes = await prisma.deliveryDispute.findMany({
+    where: { order: { items: { some: { artistId: artist.id } } } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+    take: 50,
+    select: {
+      id: true,
+      status: true,
+      reason: true,
+      description: true,
+      evidenceReferences: true,
+      artistResponse: true,
+      artistEvidenceReferences: true,
+      artistRespondedAt: true,
+      resolutionNote: true,
+      resolvedAt: true,
+      createdAt: true,
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          artistResponseDeadline: true,
+          releaseStatus: true,
+          items: {
+            where: { artistId: artist.id },
+            select: { id: true, titleSnapshot: true },
+          },
+          deliveryEvents: {
+            orderBy: { occurredAt: 'asc' },
+            select: { eventType: true, occurredAt: true },
+          },
+        },
+      },
+    },
+  });
+  res.json({
+    status: 'success',
+    data: disputes.map((dispute) => ({
+      ...dispute,
+      order: {
+        ...dispute.order,
+        items: dispute.order.items.map((item) => ({ id: item.id, title: item.titleSnapshot })),
+      },
+    })),
+  });
+}
+
+export async function respondToArtistDeliveryDispute(req: Request, res: Response): Promise<void> {
+  const disputeId = idParam(req, 'disputeId');
+  const input = req.body as ArtistDisputeResponseInput;
+  const result = await prisma.$transaction(async (tx) => {
+    const initial = await tx.deliveryDispute.findUnique({
+      where: { id: disputeId },
+      select: { id: true, orderId: true },
+    });
+    if (!initial) throw new HttpError(404, 'Delivery dispute not found', { code: 'DISPUTE_NOT_FOUND' });
+    await lockOrderForDelivery(tx, initial.orderId);
+    const artistId = await getArtistId(tx, req.user!.id);
+    const dispute = await tx.deliveryDispute.findFirst({
+      where: {
+        id: disputeId,
+        orderId: initial.orderId,
+        order: { items: { some: { artistId } } },
+      },
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        artistResponse: true,
+        artistEvidenceReferences: true,
+        artistRespondedAt: true,
+      },
+    });
+    if (!dispute) throw new HttpError(404, 'Delivery dispute not found', { code: 'DISPUTE_NOT_FOUND' });
+    if (dispute.artistRespondedAt) {
+      if (
+        dispute.artistResponse === input.response &&
+        JSON.stringify(dispute.artistEvidenceReferences) === JSON.stringify(input.evidenceReferences)
+      ) {
+        return { id: dispute.id, respondedAt: dispute.artistRespondedAt, duplicate: true };
+      }
+      throw new HttpError(409, 'An artist response has already been recorded for this dispute.', {
+        code: 'DISPUTE_RESPONSE_ALREADY_RECORDED',
+      });
+    }
+    if (dispute.status !== 'OPEN') {
+      throw new HttpError(409, 'Only an open dispute can receive an artist response.', {
+        code: 'DISPUTE_CLOSED',
+      });
+    }
+    const now = new Date();
+    const updated = await tx.deliveryDispute.updateMany({
+      where: { id: dispute.id, status: 'OPEN', artistRespondedAt: null },
+      data: {
+        artistResponse: input.response,
+        artistEvidenceReferences: input.evidenceReferences,
+        artistRespondedAt: now,
+      },
+    });
+    if (updated.count !== 1) {
+      throw new HttpError(409, 'Dispute response was submitted concurrently.', {
+        code: 'STATE_CONFLICT',
+      });
+    }
+    await appendDeliveryEvent(tx, {
+      orderId: dispute.orderId,
+      actorId: req.user!.id,
+      eventType: 'ARTIST_DISPUTE_RESPONSE_SUBMITTED',
+      metadata: { disputeId: dispute.id, evidenceReferenceCount: input.evidenceReferences.length },
+    });
+    await recordAudit(tx, {
+      actorId: req.user!.id,
+      action: 'ORDER_STATUS_CHANGED',
+      entityType: 'DeliveryDispute',
+      entityId: dispute.id,
+      reason: 'Artist submitted a response to a delivery dispute.',
+      metadata: { orderId: dispute.orderId, disputeStatus: 'OPEN', evidenceReferenceCount: input.evidenceReferences.length },
+    });
+    await notifyOrderParties(tx, dispute.orderId, {
+      type: 'ARTIST_DELIVERY_DISPUTE_RESPONSE',
+      title: 'Artist responded to the delivery issue',
+      message: 'The artist submitted a response and any referenced evidence. The dispute remains open pending review.',
+      link: '/studio/support',
+    });
+    return { id: dispute.id, respondedAt: now, duplicate: false };
+  });
+  res.status(result.duplicate ? 200 : 201).json({ status: 'success', data: result });
 }
 
 export async function shipArtistOrder(req: Request, res: Response): Promise<void> {

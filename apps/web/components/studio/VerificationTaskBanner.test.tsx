@@ -12,7 +12,7 @@ const req = (status: ArtistRequest['status']): ArtistRequest => ({
   completedAt: null, cancelledAt: null, submission: null,
 });
 const own = (over: Partial<OwnVerification>): OwnVerification => ({
-  verificationStatus: 'PENDING', activeRequest: null, history: [], ...over,
+  verificationStatus: 'PENDING', latestDecision: null, activeRequest: null, history: [], ...over,
 });
 
 beforeEach(() => vi.resetAllMocks());
@@ -33,18 +33,21 @@ describe('VerificationTaskBanner (persistent dashboard task)', () => {
     expect(screen.getByRole('link', { name: 'View your response' }).getAttribute('href')).toBe('/studio/verification/req-9');
   });
 
-  it('shows a calm pending state with no task, and does not block draft work', async () => {
+  it('clearly says verification has not been submitted when no request exists', async () => {
     vi.mocked(fetchOwnVerification).mockResolvedValue(own({}));
     render(<VerificationTaskBanner />);
-    expect(await screen.findByText('Verification pending')).toBeTruthy();
-    expect(screen.getByText(/keep preparing your profile and draft artwork/)).toBeTruthy();
+    expect(await screen.findByText('Verification not submitted')).toBeTruthy();
+    expect(screen.getByText(/review has not started/)).toBeTruthy();
   });
 
-  it('reports a rejection without exposing any internal reason', async () => {
-    vi.mocked(fetchOwnVerification).mockResolvedValue(own({ verificationStatus: 'REJECTED' }));
+  it('shows the rejection reason returned for the artist’s own profile', async () => {
+    vi.mocked(fetchOwnVerification).mockResolvedValue(own({
+      verificationStatus: 'REJECTED',
+      latestDecision: { decision: 'REJECTED', reason: 'Please share proof of authorship.', createdAt: '2026-10-20T12:00:00Z' },
+    }));
     render(<VerificationTaskBanner />);
     expect(await screen.findByText(/not approved/)).toBeTruthy();
-    expect(screen.getByText(/Contact support/)).toBeTruthy();
+    expect(screen.getByText(/Please share proof of authorship/)).toBeTruthy();
   });
 
   it('renders nothing for a verified artist, and nothing if the call fails', async () => {

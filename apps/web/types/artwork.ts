@@ -5,6 +5,7 @@ export interface ArtworkArtistSummary {
 }
 
 export interface ArtworkArtistDetail extends ArtworkArtistSummary {
+  id: string;
   biography: string | null;
   profileImageUrl: string | null;
 }

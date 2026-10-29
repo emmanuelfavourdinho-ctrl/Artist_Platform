@@ -8,6 +8,7 @@ export interface ArtistArtworkSummary {
   id: string;
   slug: string;
   title: string;
+  description: string | null;
   price: string;
   currency: string;
   image: { url: string; altText: string | null } | null;
@@ -32,7 +33,9 @@ export interface ArtistProfileData {
   slug: string;
   biography: string | null;
   artisticStatement: string | null;
+  mission?: string | null;
   location: string | null;
+  website?: string | null;
   profileImageUrl: string | null;
   coverImageUrl: string | null;
   verified: boolean;

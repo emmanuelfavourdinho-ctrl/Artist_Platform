@@ -173,6 +173,7 @@ export async function getArtworkBySlug(req: Request, res: Response) {
       inventory: { select: { quantity: true, reservedQuantity: true, soldQuantity: true } },
       artist: {
         select: {
+          id: true,
           displayName: true,
           slug: true,
           biography: true,
@@ -213,6 +214,7 @@ export async function getArtworkBySlug(req: Request, res: Response) {
       available: isAvailable(artwork.inventory) && artwork.currency.toUpperCase() === 'USD',
       priceReconciliationRequired: artwork.currency.toUpperCase() !== 'USD',
       artist: {
+        id: artwork.artist.id,
         name: artwork.artist.displayName,
         slug: artwork.artist.slug,
         biography: artwork.artist.biography,

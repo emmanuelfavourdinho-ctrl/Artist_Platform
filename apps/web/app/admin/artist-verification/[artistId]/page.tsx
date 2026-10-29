@@ -399,7 +399,7 @@ export default function ArtistReviewPage() {
       {dialog === 'reject' && (
         <ReasonDialog
           title={`Reject ${artist.displayName}`}
-          description="This rejects the application. The reason is recorded for staff and is not shown to the artist."
+          description="This rejects the application. The reason is recorded in the review history and shown to the artist."
           confirmLabel="Confirm: reject"
           required
           destructive

@@ -14,7 +14,7 @@ vi.mock('../lib/prisma.js', () => {
       updateMany: vi.fn(),
     },
     verificationSubmission: { create: vi.fn() },
-    artistVerificationDecision: { create: vi.fn(), findMany: vi.fn() },
+    artistVerificationDecision: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
     notification: { create: vi.fn(), findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
     artwork: { findMany: vi.fn() },
@@ -383,7 +383,7 @@ describe('POST final decision', () => {
     });
   });
 
-  it('rejects with a reason, completes the reviewed round, and keeps the reason internal', async () => {
+  it('rejects with a reason, completes the reviewed round, and keeps notifications generic', async () => {
     sessionAs(['MODERATOR']);
     pendingArtist();
     vi.mocked(prisma.verificationInfoRequest.findFirst).mockResolvedValue({ id: REQ, status: 'AWAITING_REVIEW' } as never);
@@ -448,10 +448,34 @@ describe('artist: own verification tasks', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.activeRequest.id).toBe(REQ);
     expect(res.body.data.history.map((r: { id: string }) => r.id)).toEqual([OTHER_REQ]);
+    expect(prisma.artistVerificationDecision.findFirst).toHaveBeenCalledWith({
+      where: { artistId: ARTIST },
+      orderBy: { createdAt: 'desc' },
+      select: { decision: true, reason: true, createdAt: true },
+    });
     const select = (vi.mocked(prisma.verificationInfoRequest.findMany).mock.calls[0]![0] as { select: Record<string, unknown> }).select;
     for (const internal of ['requestedBy', 'cancelledBy', 'cancellationReason', 'requestedById']) {
       expect(select).not.toHaveProperty(internal);
     }
+  });
+
+  it('returns the signed-in artist’s last decision and rejection reason', async () => {
+    sessionAs(['ARTIST'], ARTIST_USER);
+    vi.mocked(prisma.artistProfile.findUnique).mockResolvedValue({ id: ARTIST, verificationStatus: 'REJECTED' } as never);
+    vi.mocked(prisma.verificationInfoRequest.findMany).mockResolvedValue([] as never);
+    const decidedAt = new Date('2026-10-20T12:00:00Z');
+    vi.mocked(prisma.artistVerificationDecision.findFirst).mockResolvedValue({
+      decision: 'REJECTED', reason: 'Please provide clearer proof of authorship.', createdAt: decidedAt,
+    } as never);
+
+    const res = await get(own);
+    expect(res.status).toBe(200);
+    expect(res.body.data.latestDecision).toEqual({
+      decision: 'REJECTED', reason: 'Please provide clearer proof of authorship.', createdAt: decidedAt.toISOString(),
+    });
+    expect(prisma.artistVerificationDecision.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { artistId: ARTIST },
+    }));
   });
 
   it('scopes every lookup to the signed-in artist: another artist’s valid id is a 404', async () => {

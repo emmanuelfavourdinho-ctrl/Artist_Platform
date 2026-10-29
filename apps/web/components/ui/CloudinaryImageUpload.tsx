@@ -16,6 +16,8 @@ export interface UploadedCloudinaryImage {
   width: number;
   height: number;
   bytes: number;
+  version: number;
+  signature: string;
   altText?: string;
 }
 
@@ -24,6 +26,11 @@ interface CloudinaryImageUploadProps {
   onChange: (images: UploadedCloudinaryImage[]) => void;
   maxImages?: number;
   signaturePath?: string;
+  label?: string;
+  description?: string;
+  maxFileSize?: number;
+  acceptedTypes?: string[];
+  onUploadStatusChange?: (uploading: boolean) => void;
 }
 
 interface SignatureResponse {
@@ -44,6 +51,11 @@ export function CloudinaryImageUpload({
   onChange,
   maxImages = 10,
   signaturePath = '/v1/studio/uploads/cloudinary-signature',
+  label = 'Artwork Images',
+  description = 'Upload clear photos of your artwork.',
+  maxFileSize = MAX_FILE_SIZE,
+  acceptedTypes = ACCEPTED_TYPES,
+  onUploadStatusChange,
 }: CloudinaryImageUploadProps) {
   const { firebaseUser } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,15 +67,18 @@ export function CloudinaryImageUpload({
   const uploadFile = async (file: File) => {
     setError(null);
     setRetryFile(null);
-    if (!ACCEPTED_TYPES.includes(file.type)) {
-      setError('Choose a JPG, PNG, WEBP, or GIF image.');
+    if (!acceptedTypes.includes(file.type)) {
+      setError('Choose a JPG, PNG, or WEBP image.');
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      setError('Images must be smaller than 50 MB.');
+    if (file.size > maxFileSize) {
+      setError(`Images must be smaller than ${Math.round(maxFileSize / (1024 * 1024))} MB.`);
       return;
     }
 
+    setUploading(true);
+    setProgress(0);
+    onUploadStatusChange?.(true);
     try {
       const dimensions = await readDimensions(file);
       if (dimensions.width > 20000 || dimensions.height > 20000) {
@@ -83,8 +98,6 @@ export function CloudinaryImageUpload({
       formData.append('signature', signature.data.signature);
       formData.append('folder', signature.data.folder);
 
-      setUploading(true);
-      setProgress(0);
       const uploaded = await new Promise<UploadedCloudinaryImage>((resolve, reject) => {
         const request = new XMLHttpRequest();
         request.open(
@@ -107,6 +120,8 @@ export function CloudinaryImageUpload({
             width: number;
             height: number;
             bytes: number;
+            version: number;
+            signature: string;
           };
           resolve({
             publicId: result.public_id,
@@ -116,6 +131,8 @@ export function CloudinaryImageUpload({
             width: result.width,
             height: result.height,
             bytes: result.bytes,
+            version: result.version,
+            signature: result.signature,
           });
         };
         request.onerror = () =>
@@ -128,6 +145,7 @@ export function CloudinaryImageUpload({
       setRetryFile(file);
     } finally {
       setUploading(false);
+      onUploadStatusChange?.(false);
     }
   };
 
@@ -144,10 +162,10 @@ export function CloudinaryImageUpload({
       <div className="flex items-center justify-between">
         <div>
           <label className="block text-xs uppercase text-[rgb(var(--muted))] font-mono">
-            Artwork Images
+            {label}
           </label>
           <p className="text-xs text-[rgb(var(--muted))] mt-1">
-            Upload clear photos of your artwork.
+            {description}
           </p>
         </div>
         <button
@@ -161,7 +179,7 @@ export function CloudinaryImageUpload({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPTED_TYPES.join(',')}
+          accept={acceptedTypes.join(',')}
           multiple
           hidden
           onChange={(event) => chooseFiles(event.target.files)}

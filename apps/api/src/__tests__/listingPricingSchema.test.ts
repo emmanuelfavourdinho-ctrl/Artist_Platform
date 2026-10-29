@@ -14,6 +14,8 @@ describe('USD canonical artwork prices', () => {
       width: 100,
       height: 100,
       bytes: 100,
+      version: 1,
+      signature: 'a'.repeat(40),
     }],
   };
 

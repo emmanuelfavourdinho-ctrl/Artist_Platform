@@ -142,6 +142,7 @@ model User {
   inventoryReservations         InventoryReservation[]
   conversationsAsBuyer          Conversation[]               @relation("BuyerConversations")
   messagesSent                  Message[]
+  messagesPinned                Message[]                     @relation("MessagePinActor")
   communityPosts                CommunityPost[]              @relation("CommunityPostAuthor")
   enforcementsReceived          UserEnforcement[]            @relation("EnforcementTarget")
   enforcementsIssued            UserEnforcement[]            @relation("EnforcementActor")
@@ -561,6 +562,7 @@ enum OrderDeliveryEventType {
   ARTIST_COMPLETION_CONFIRMED
   BUYER_RECEIPT_CONFIRMED
   DELIVERY_DISPUTE_OPENED
+  ARTIST_DISPUTE_RESPONSE_SUBMITTED
   DELIVERY_DISPUTE_RESOLVED
   RELEASE_ELIGIBLE
   RELEASE_BLOCKED
@@ -1013,6 +1015,9 @@ model DeliveryDispute {
   reason         String
   description    String
   evidenceReferences String[]          @default([])
+  artistResponse String?
+  artistEvidenceReferences String[]    @default([])
+  artistRespondedAt DateTime?
   resolutionNote String?
   resolvedBy     String?
   resolvedAt     DateTime?
@@ -1201,6 +1206,10 @@ enum AuditAction {
   VERIFICATION_REQUEST_CANCELLED
   CONTACT_MESSAGE_STATUS_CHANGED
   FINANCIAL_OPERATION_CHANGED
+  ARTWORK_SUBMITTED
+  ARTWORK_ARCHIVED
+  ARTWORK_PUBLISHED
+  ARTWORK_UPDATED
 }
 
 model AuditLog {
@@ -1269,13 +1278,19 @@ model Message {
   attachmentName String?
   attachmentSize Int?
   readAt         DateTime?
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  pinnedAt       DateTime?
+  pinnedById     String?
   createdAt      DateTime  @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  pinnedBy     User?        @relation("MessagePinActor", fields: [pinnedById], references: [id], onDelete: SetNull)
 
   @@index([conversationId])
   @@index([createdAt])
+  @@index([conversationId, pinnedAt])
 }
 
 model CommunityPost {

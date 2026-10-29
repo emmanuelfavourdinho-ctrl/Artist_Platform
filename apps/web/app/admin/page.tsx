@@ -70,7 +70,7 @@ function OverviewContent() {
         {
           title: 'Artists pending verification',
           count: data.queues.pendingArtistVerification,
-          href: '/admin/artist-verification',
+          href: can('artists.review') ? '/admin/artist-verification' : undefined,
         },
         {
           title: 'Open reports',

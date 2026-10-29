@@ -32,6 +32,8 @@ describe('GET /api/v1/artists/:slug', () => {
       slug: 'amara-n',
       biography: 'Lagos-based painter.',
       artisticStatement: null,
+      mission: 'To share the joy of color.',
+      website: 'https://amara.example',
       location: 'Lagos, Nigeria',
       profileImageUrl: null,
       coverImageUrl: null,
@@ -44,6 +46,7 @@ describe('GET /api/v1/artists/:slug', () => {
         id: 'artwork-1',
         slug: 'sunset-over-lagos',
         title: 'Sunset Over Lagos',
+        description: 'A warm evening over the city.',
         price: '450.00',
         currency: 'USD',
         images: [{ url: 'https://picsum.photos/seed/a/800', altText: 'Sunset' }],
@@ -74,12 +77,18 @@ describe('GET /api/v1/artists/:slug', () => {
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({
       name: 'Amara N.',
+      mission: 'To share the joy of color.',
+      website: 'https://amara.example',
       verified: true,
       rating: { average: 4.5, count: 2 },
     });
     expect(response.body.data.artworks[0]).toMatchObject({
       slug: 'sunset-over-lagos',
+      description: 'A warm evening over the city.',
       available: true,
+    });
+    expect(vi.mocked(prisma.artwork.findMany).mock.calls[0]?.[0]).toMatchObject({
+      where: { artistId: 'artist-1', status: 'PUBLISHED', visibility: 'PUBLIC' },
     });
     expect(response.body.data.reviews[0]).toMatchObject({
       reviewerName: 'Blessing O.',
@@ -94,6 +103,8 @@ describe('GET /api/v1/artists/:slug', () => {
       slug: 'amara-n',
       biography: null,
       artisticStatement: null,
+      mission: null,
+      website: null,
       location: null,
       profileImageUrl: null,
       coverImageUrl: null,

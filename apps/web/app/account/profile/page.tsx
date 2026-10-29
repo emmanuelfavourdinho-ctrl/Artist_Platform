@@ -39,7 +39,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ProfileContent() {
-  const { refresh, signOut } = useAuth();
+  const { refresh, signOut, appUser, artistProfile } = useAuth();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -247,11 +247,12 @@ function ProfileContent() {
             <div className="mt-3">
               <StatusBadge status={profile.status} />
             </div>
-            {profile.roles && (
-              <p className="mt-3 text-xs uppercase tracking-wide text-muted">
-                {profile.roles.join(' · ')}
-              </p>
-            )}
+            {profile.roles && <div className="mt-3 flex flex-wrap gap-2" aria-label="Account roles">{profile.roles.map((role) => <span key={role} className="rounded-full border border-border/20 px-2.5 py-1 text-xs text-muted">{role === 'BUYER' ? 'Buyer' : role === 'ARTIST' ? 'Artist' : role}</span>)}</div>}
+            <nav aria-label="Workspaces" className="mt-4 flex flex-col items-start gap-2 text-sm">
+              {appUser?.roles.includes('BUYER') && <Link href="/account" className="text-accent underline underline-offset-2">Buyer dashboard</Link>}
+              {appUser?.roles.includes('ARTIST') && <Link href="/studio" className="text-accent underline underline-offset-2">Artist Studio workspace</Link>}
+              {appUser?.roles.includes('ARTIST') && artistProfile?.slug && <Link href={`/artists/${artistProfile.slug}`} className="text-accent underline underline-offset-2">Public artist portfolio</Link>}
+            </nav>
             <button
               type="button"
               onClick={() => void signOut()}

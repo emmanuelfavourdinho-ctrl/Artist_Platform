@@ -1,12 +1,15 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import type { ArtistProfileData } from '../../lib/artistsApi';
+import { publicUrl } from '../../lib/siteUrl';
 import { CoverImage } from '../ui/CoverImage';
+import { ShareActions } from '../ui/ShareActions';
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
 
 export function ArtistHeader({ artist }: { artist: ArtistProfileData }) {
-  const commissionHref =
-    `/commissions/request?artistId=${encodeURIComponent(artist.id)}&artistSlug=${encodeURIComponent(artist.slug)}` as any;
+  const commissionHref = `/commissions/request?artistId=${encodeURIComponent(artist.id)}&artistSlug=${encodeURIComponent(artist.slug)}` as Route;
+  const messageHref = `/messages?artistId=${encodeURIComponent(artist.id)}&artistSlug=${encodeURIComponent(artist.slug)}` as Route;
 
   return (
     <div className="relative">
@@ -51,27 +54,30 @@ export function ArtistHeader({ artist }: { artist: ArtistProfileData }) {
           </div>
         </div>
 
-        {/* Primary relationship entry point. Intentionally the only CTA on
-            this profile — no generic "Message artist" action — so contact
-            always starts with a concrete commission, not an open-ended
-            conversation. See ProtectedRoute for how the artist selection
-            survives an auth detour. */}
-        <div className="pb-2 sm:pb-0">
+        <div className="flex flex-wrap gap-2 pb-2 sm:pb-0">
+          <Link href={messageHref} className="inline-flex min-h-11 items-center justify-center rounded-full border border-foreground/20 px-5 text-sm font-medium text-foreground hover:border-accent hover:text-accent">
+            Message Artist
+          </Link>
           {artist.verified ? (
             <Link
               href={commissionHref}
-              className="inline-flex items-center justify-center whitespace-nowrap bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:opacity-90"
+              className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-full bg-accent px-5 text-sm font-medium text-accent-foreground transition hover:opacity-90"
             >
               Request a Commission
             </Link>
           ) : (
             // The API refuses commission requests for unverified artists, so
             // the page says so instead of offering an action that will fail.
-            <span className="inline-flex items-center whitespace-nowrap border border-border/20 px-6 py-3 text-sm text-muted">
+            <span className="inline-flex min-h-11 items-center whitespace-nowrap rounded-full border border-border/20 px-5 text-sm text-muted">
               Not yet accepting commissions
             </span>
           )}
         </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-foreground/10 pt-5">
+        {artist.website ? <a href={artist.website} target="_blank" rel="noreferrer" className="text-sm text-accent underline underline-offset-4">Artist website ↗</a> : <span />}
+        <ShareActions url={publicUrl(`/artists/${artist.slug}`)} title={`${artist.name} — Fine Arts`} />
       </div>
 
       {(artist.biography || artist.artisticStatement) && (
@@ -94,6 +100,12 @@ export function ArtistHeader({ artist }: { artist: ArtistProfileData }) {
               </p>
             </div>
           )}
+        </div>
+      )}
+      {artist.mission && (
+        <div className="mt-6 max-w-3xl border-l-2 border-accent/50 pl-4">
+          <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">What guides my work</h2>
+          <p className="mt-2 text-sm leading-7 text-foreground/80">{artist.mission}</p>
         </div>
       )}
 

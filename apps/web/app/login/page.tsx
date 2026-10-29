@@ -18,7 +18,14 @@ import { useAuthForm } from '../../lib/useAuthForm';
 function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const redirectTo = useSearchParams().get('redirect');
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect');
+  const action = searchParams.get('action');
+  const actionMessage = action === 'message'
+    ? 'Sign in to start a conversation. We will take you back to the artist after you sign in.'
+    : action === 'commission'
+      ? 'Sign in to send a commission request. Your selected artist will be kept for you.'
+      : null;
 
   const { error, emailPending, googlePending, anyPending, runEmail, runGoogle } =
     useAuthForm(redirectTo);
@@ -47,6 +54,7 @@ function LoginPageContent() {
       </Reveal>
 
       <Reveal delay={120}>
+        {actionMessage && <p role="status" className="mt-6 rounded border border-accent/20 bg-accent/5 px-4 py-3 text-sm text-foreground/80">{actionMessage}</p>}
         <div role="alert" aria-live="assertive" className="mt-10">
           {error && <FormAlert message={error} />}
         </div>

@@ -8,6 +8,7 @@ import { ReviewForm } from '../../../components/artwork/ReviewForm';
 import { ReviewsList } from '../../../components/artwork/ReviewsList';
 import { fetchArtworkBySlug } from '../../../lib/artworksApi';
 import { fetchArtworkReviews } from '../../../lib/reviewsApi';
+import { publicUrl } from '../../../lib/siteUrl';
 
 interface ArtworkPageProps {
   params: Promise<{ slug: string }>;
@@ -25,11 +26,15 @@ export async function generateMetadata({ params }: ArtworkPageProps): Promise<Me
   return {
     title: `${artwork.title} by ${artistName} — Fine Arts`,
     description: artwork.description ?? `${artwork.title}, an original work by ${artistName}.`,
+    alternates: { canonical: publicUrl(`/artwork/${artwork.slug}`) },
     openGraph: {
-      title: artwork.title,
-      description: artwork.description ?? `Original artwork by ${artistName}`,
-      images: primaryImage ? [{ url: primaryImage, alt: artwork.title }] : [],
+      type: 'website',
+      url: publicUrl(`/artwork/${artwork.slug}`),
+      title: `${artwork.title} by ${artistName} — Fine Arts`,
+      description: artwork.description ?? `Original artwork by ${artistName}.`,
+      images: primaryImage ? [{ url: primaryImage, alt: artwork.title, width: artwork.images.find((img) => img.url === primaryImage)?.width ?? undefined, height: artwork.images.find((img) => img.url === primaryImage)?.height ?? undefined }] : [],
     },
+    twitter: { card: 'summary_large_image' },
   };
 }
 
@@ -63,6 +68,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
         ? 'https://schema.org/InStock'
         : 'https://schema.org/OutOfStock',
     },
+    url: publicUrl(`/artwork/${artwork.slug}`),
   };
 
   return (
@@ -90,6 +96,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
             </p>
           </div>
         </div>
+        <Link href={`/artists/${artwork.artist.slug}`} className="mt-10 inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4">← Back to {artistName}&apos;s portfolio</Link>
 
         <section className="mt-20 border-t border-slate-200 pt-16 dark:border-slate-800">
           <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">

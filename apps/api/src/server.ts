@@ -1,6 +1,8 @@
 import type { Server } from 'node:http';
+import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config/index.js';
 import { connectRedis, disconnectRedis, pingRedis } from './config/redis.js';
+import { registerMessagingSocket } from './sockets/messagingSocket.js';
 
 interface Logger {
   info: (msg: string, meta?: unknown) => void;
@@ -104,6 +106,10 @@ async function startServer(): Promise<void> {
     const { app } = await import('./app.js');
 
     server = app.listen(PORT);
+    const socketServer = new SocketIOServer(server, {
+      cors: { origin: config.corsOrigin, credentials: true },
+    });
+    registerMessagingSocket(socketServer);
 
     await new Promise<void>((resolve, reject) => {
       server!.once('listening', () => resolve());
