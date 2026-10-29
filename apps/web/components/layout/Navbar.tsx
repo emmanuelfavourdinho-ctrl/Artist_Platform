@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useScrolled } from '../../hooks/useScrolled';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { NotificationFeed } from '../NotificationFeed';
 
 const NAV_LINKS: { label: string; href: Route }[] = [
   { label: 'Discover', href: '/gallery' },
@@ -84,12 +85,15 @@ export function Navbar() {
           </Link>
 
           {appUser ? (
+            <>
+            <NotificationFeed />
             <Link
               href="/account"
               className="text-[13px] font-medium uppercase tracking-[0.12em] text-foreground/80 transition-colors duration-200 hover:text-foreground"
             >
               My Account
             </Link>
+            </>
           ) : (
             <>
               <Link

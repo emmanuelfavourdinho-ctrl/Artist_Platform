@@ -19,3 +19,13 @@ export type RecordEmailOutcomeInput = z.infer<typeof recordEmailOutcomeSchema>;
 export const updateContactMessageStatusSchema = z.object({
   status: z.enum(['UNREAD', 'READ', 'REPLIED', 'ARCHIVED']),
 });
+
+export type UpdateContactMessageStatusInput = z.infer<typeof updateContactMessageStatusSchema>;
+
+export const listContactMessagesQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+  view: z.enum(['INBOX', 'ARCHIVED']).default('INBOX'),
+});
+
+export type ListContactMessagesQuery = z.infer<typeof listContactMessagesQuerySchema>;

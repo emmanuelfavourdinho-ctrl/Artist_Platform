@@ -17,11 +17,9 @@ datasource db {
 //    generated, globally-unique identifier. Consistent across the whole
 //    schema; don't introduce auto-increment ints for a new model.
 //
-// 2. Money: every monetary field is `Decimal @db.Decimal(12, 2)`, never
-//    Float. Floats store money as an approximation ("0.1 + 0.2 != 0.3").
-//    IMPORTANT for API/frontend authors: Prisma serializes Decimal to
-//    JSON as a STRING, not a number — always `Number(value)` before
-//    formatting or doing arithmetic in TypeScript.
+// 2. Order and payment snapshots use `Decimal @db.Decimal(12, 2)`, never
+//    Float. Refund, payout, and financial activity amounts use integer
+//    minor units in BigInt fields. Floats store money approximately.
 //
 // 3. Currency codes (USD, EUR, XAF, ...) are plain `String`, not an enum —
 //    150+ real codes exist and Postgres enums need a migration to add a
@@ -89,11 +87,19 @@ datasource db {
 // DOMAIN 1 — IDENTITY & ACCESS
 // ===========================================================================
 
+// RESTRICTED: can sign in and browse but cannot create marketplace
+//   activity (see requireGoodStanding). SUSPENDED / BANNED / DEACTIVATED:
+//   cannot use any authenticated endpoint (see requireAuth). SUSPENDED and
+//   RESTRICTED may be temporary (UserEnforcement.expiresAt); BANNED is
+//   permanent until an authorised reinstatement. DEACTIVATED is the
+//   user's own choice and is not changed by admin enforcement.
 enum UserStatus {
   ACTIVE
   SUSPENDED
   DEACTIVATED
   PENDING_VERIFICATION
+  RESTRICTED
+  BANNED
 }
 
 model User {
@@ -113,24 +119,40 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  roles                 UserRole[]
-  sessions              Session[]
-  addresses             Address[]
-  artistProfile         ArtistProfile?
-  cart                  Cart?
-  orders                Order[]
-  favorites             Favorite[]
-  reviews               Review[]
-  commissionsRequested  CommissionRequest[]    @relation("BuyerCommissions")
-  notifications         Notification[]
-  moderationActions     ArtworkModeration[]    @relation("AdminModerationActions")
-  auditLogs             AuditLog[]
-  inventoryReservations InventoryReservation[]
-  conversationsAsBuyer  Conversation[]         @relation("BuyerConversations")
-  messagesSent          Message[]
-  communityPosts        CommunityPost[]        @relation("CommunityPostAuthor")
-  reportsSubmitted      Report[]               @relation("ReportsSubmitted")
-  reportsReviewed       Report[]               @relation("ReportsReviewed")
+  roles                         UserRole[]
+  sessions                      Session[]
+  addresses                     Address[]
+  artistProfile                 ArtistProfile?
+  cart                          Cart?
+  orders                        Order[]
+  deliveryDisputes              DeliveryDispute[]
+  deliveryDisputesResolved       DeliveryDispute[]          @relation("DeliveryDisputeResolver")
+  orderDeliveryEvents            OrderDeliveryEvent[]
+  refundRequestsCreated         RefundRequest[]             @relation("RefundRequester")
+  refundRequestsDecided         RefundRequest[]             @relation("RefundDecider")
+  artistPayoutsRequested         ArtistPayout[]              @relation("PayoutRequester")
+  artistPayoutsDecided           ArtistPayout[]              @relation("PayoutDecider")
+  financialOperationEvents      FinancialOperationEvent[]
+  favorites                     Favorite[]
+  reviews                       Review[]
+  commissionsRequested          CommissionRequest[]          @relation("BuyerCommissions")
+  notifications                 Notification[]
+  moderationActions             ArtworkModeration[]          @relation("AdminModerationActions")
+  auditLogs                     AuditLog[]
+  inventoryReservations         InventoryReservation[]
+  conversationsAsBuyer          Conversation[]               @relation("BuyerConversations")
+  messagesSent                  Message[]
+  messagesPinned                Message[]                     @relation("MessagePinActor")
+  communityPosts                CommunityPost[]              @relation("CommunityPostAuthor")
+  enforcementsReceived          UserEnforcement[]            @relation("EnforcementTarget")
+  enforcementsIssued            UserEnforcement[]            @relation("EnforcementActor")
+  verificationRequestsIssued    VerificationInfoRequest[]    @relation("VerificationRequester")
+  verificationRequestsCancelled VerificationInfoRequest[]    @relation("VerificationCanceller")
+  verificationSubmissions       VerificationSubmission[]     @relation("VerificationSubmitter")
+  verificationDecisionsMade     ArtistVerificationDecision[] @relation("VerificationDecider")
+  reportsSubmitted              Report[]                     @relation("ReportsSubmitted")
+  reportsReviewed               Report[]                     @relation("ReportsReviewed")
+  checkoutIntents                CheckoutIntent[]
 
   @@index([status])
   @@index([createdAt])
@@ -244,15 +266,19 @@ model ArtistProfile {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievements        ArtistAchievement[]
-  socialLinks         ArtistSocialLink[]
-  artworks            Artwork[]
-  orderItems          OrderItem[]
-  commissionsReceived CommissionRequest[]  @relation("ArtistCommissions")
-  conversations       Conversation[]       @relation("ArtistConversations")
-  communityPosts      CommunityPost[]      @relation("ArtistCommunityPosts")
-  commissionProposals CommissionProposal[]
+  user                  User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievements          ArtistAchievement[]
+  socialLinks           ArtistSocialLink[]
+  artworks              Artwork[]
+  orderItems            OrderItem[]
+  commissionsReceived   CommissionRequest[]          @relation("ArtistCommissions")
+  conversations         Conversation[]               @relation("ArtistConversations")
+  communityPosts        CommunityPost[]              @relation("ArtistCommunityPosts")
+  commissionProposals   CommissionProposal[]
+  orderFulfillments     ArtistOrderFulfillment[]
+  payouts               ArtistPayout[]
+  verificationRequests  VerificationInfoRequest[]
+  verificationDecisions ArtistVerificationDecision[]
 
   @@index([slug])
   @@index([verificationStatus])
@@ -518,11 +544,39 @@ enum OrderStatus {
   PARTIALLY_REFUNDED
 }
 
+enum PaymentReleaseStatus {
+  NOT_ELIGIBLE
+  ELIGIBLE
+  BLOCKED
+}
+
+enum DeliveryDisputeStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum OrderDeliveryEventType {
+  SHIPPED
+  TRACKING_UPDATED
+  ARTIST_COMPLETION_CONFIRMED
+  BUYER_RECEIPT_CONFIRMED
+  DELIVERY_DISPUTE_OPENED
+  ARTIST_DISPUTE_RESPONSE_SUBMITTED
+  DELIVERY_DISPUTE_RESOLVED
+  RELEASE_ELIGIBLE
+  RELEASE_BLOCKED
+  RELEASE_UNBLOCKED
+  RELEASE_HOLD_CHANGED
+  ARTIST_RESPONSE_WINDOW_EXPIRED
+}
+
 model Order {
-  id          String      @id @default(uuid())
-  userId      String
-  orderNumber String      @unique
-  status      OrderStatus @default(PENDING)
+  id                String      @id @default(uuid())
+  userId            String
+  orderNumber       String      @unique
+  checkoutSessionId String?     @unique
+  status            OrderStatus @default(PENDING)
 
   subtotal       Decimal @db.Decimal(12, 2)
   shippingAmount Decimal @default(0) @db.Decimal(12, 2)
@@ -530,6 +584,13 @@ model Order {
   discountAmount Decimal @default(0) @db.Decimal(12, 2)
   totalAmount    Decimal @db.Decimal(12, 2)
   currency       String
+  buyerReceivedGoodAt DateTime?
+  artistResponseDeadline DateTime?
+  artistResponseWindowExpiredAt DateTime?
+  releaseStatus PaymentReleaseStatus @default(NOT_ELIGIBLE)
+  releaseEligibleAt DateTime?
+  releaseHoldAt DateTime?
+  releaseHoldReason String?
 
   shippingAddressSnapshot Json
   billingAddressSnapshot  Json
@@ -540,14 +601,58 @@ model Order {
   user          User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
   items         OrderItem[]
   payments      Payment[]
+  financialActivities FinancialActivity[]
   invoice       Invoice?
   shipment      Shipment?
+  artistFulfillments ArtistOrderFulfillment[]
+  deliveryDisputes DeliveryDispute[]
+  deliveryEvents OrderDeliveryEvent[]
+  refunds        RefundRequest[]
+  artistPayouts  ArtistPayout[]
   reservations  InventoryReservation[]
   conversations Conversation[]
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+enum CheckoutIntentStatus {
+  READY
+  CREATING
+  UNKNOWN
+  OPEN
+  COMPLETED
+  PAID
+  FAILED
+  EXPIRED
+  RECONCILIATION_REQUIRED
+}
+
+model CheckoutIntent {
+  id                   String               @id @default(uuid())
+  userId               String
+  idempotencyKey       String
+  cartFingerprint      String
+  reservationGroupId   String               @unique
+  providerRequest      Json
+  status               CheckoutIntentStatus @default(READY)
+  stripeSessionId      String?              @unique
+  checkoutUrl          String?
+  providerExpiresAt    DateTime?
+  creationLeaseUntil   DateTime?
+  creationLeaseToken   String?
+  lastAttemptAt        DateTime?
+  lastError            String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reservations InventoryReservation[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([status, updatedAt])
+  @@index([creationLeaseUntil])
 }
 
 model OrderItem {
@@ -562,7 +667,7 @@ model OrderItem {
   quantity           Int
   currency           String
   subtotal           Decimal @db.Decimal(12, 2)
-  commissionRate     Decimal @db.Decimal(5, 4)
+  commissionRate     String  @db.Text
   commissionAmount   Decimal @db.Decimal(12, 2)
 
   order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -603,10 +708,182 @@ model Payment {
   updatedAt         DateTime      @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  financialActivities FinancialActivity[]
+  refunds RefundRequest[]
 
   @@index([orderId])
   @@index([providerPaymentId])
   @@index([status])
+}
+
+enum FinancialActivityType {
+  CHECKOUT_PAYMENT_CONFIRMED
+  REFUND_CONFIRMED
+  ARTIST_PAYOUT_CONFIRMED
+}
+
+model FinancialActivity {
+  id                      String               @id @default(uuid())
+  movementIdentifier     String               @unique
+  movementType           FinancialActivityType
+  amountMinorUnits       BigInt
+  currency               String
+  provider               String
+  providerObjectReference String
+  orderId                 String?
+  paymentId               String?
+  refundId                String?
+  payoutId                String?
+  occurredAt              DateTime?
+  recordedAt              DateTime             @default(now())
+  sourceEventId           String?
+  checkoutSessionId       String?
+
+  order   Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payment Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  refund  RefundRequest? @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  payout  ArtistPayout?  @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, movementType, providerObjectReference], map: "FinancialActivity_provider_type_objectRef_key")
+  @@index([recordedAt, id])
+  @@index([occurredAt])
+  @@index([currency, recordedAt])
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([refundId])
+  @@index([payoutId])
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  SUBMITTED
+  PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_RECONCILIATION
+}
+
+enum ArtistPayoutStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  SUBMITTED
+  PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_RECONCILIATION
+}
+
+enum FinancialOperationEventType {
+  REQUESTED
+  APPROVED
+  REJECTED
+  SUBMITTED
+  PROVIDER_PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_RECONCILIATION
+  RETRY_AUTHORIZED
+}
+
+model RefundRequest {
+  id                    String       @id @default(uuid())
+  paymentId             String
+  orderId               String
+  requestedBy           String
+  decidedBy             String?
+  amountMinorUnits      BigInt
+  currency              String
+  reason                String
+  status                RefundStatus @default(REQUESTED)
+  idempotencyKey        String       @unique
+  provider              String?
+  providerReference     String?
+  providerEventId       String?
+  attemptCount          Int          @default(0)
+  lastAttemptAt         DateTime?
+  nextRetryAt           DateTime?
+  lastErrorCode         String?
+  decidedAt             DateTime?
+  submittedAt           DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  payment            Payment                   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  order              Order                     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  requester          User                      @relation("RefundRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
+  decider            User?                     @relation("RefundDecider", fields: [decidedBy], references: [id], onDelete: SetNull)
+  events             FinancialOperationEvent[]
+  financialActivities FinancialActivity[]
+
+  @@index([paymentId, status])
+  @@index([orderId, createdAt])
+  @@index([status, updatedAt])
+  @@index([provider, providerReference])
+}
+
+model ArtistPayout {
+  id                    String            @id @default(uuid())
+  fulfillmentId         String            @unique
+  orderId               String
+  artistId              String
+  requestedBy           String
+  decidedBy             String?
+  amountMinorUnits      BigInt
+  currency              String
+  commissionMinorUnits  BigInt
+  status                ArtistPayoutStatus @default(REQUESTED)
+  idempotencyKey        String            @unique
+  provider              String?
+  providerReference     String?
+  providerEventId       String?
+  attemptCount          Int               @default(0)
+  lastAttemptAt         DateTime?
+  nextRetryAt           DateTime?
+  lastErrorCode         String?
+  decidedAt             DateTime?
+  submittedAt           DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  fulfillment       ArtistOrderFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
+  order             Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  artist            ArtistProfile          @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  requester         User                   @relation("PayoutRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
+  decider           User?                  @relation("PayoutDecider", fields: [decidedBy], references: [id], onDelete: SetNull)
+  events            FinancialOperationEvent[]
+  financialActivities FinancialActivity[]
+
+  @@index([orderId, status])
+  @@index([artistId, createdAt])
+  @@index([status, updatedAt])
+  @@index([provider, providerReference])
+}
+
+model FinancialOperationEvent {
+  id                String                      @id @default(uuid())
+  refundRequestId   String?
+  artistPayoutId    String?
+  actorId           String?
+  eventType         FinancialOperationEventType
+  fromStatus        String?
+  toStatus          String
+  reason            String?
+  providerReference String?
+  metadata          Json?
+  occurredAt        DateTime                    @default(now())
+
+  refundRequest RefundRequest? @relation(fields: [refundRequestId], references: [id], onDelete: Restrict)
+  artistPayout  ArtistPayout?  @relation(fields: [artistPayoutId], references: [id], onDelete: Restrict)
+  actor         User?          @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([refundRequestId, occurredAt])
+  @@index([artistPayoutId, occurredAt])
+  @@index([actorId, occurredAt])
 }
 
 // Idempotency ledger for Stripe webhooks. Stripe may deliver the same
@@ -639,21 +916,26 @@ model InventoryReservation {
   userId            String
   orderId           String?
   checkoutSessionId String?
-  quantity          Int
-  status            ReservationStatus @default(ACTIVE)
-  expiresAt         DateTime
-  createdAt         DateTime          @default(now())
-  releasedAt        DateTime?
+  checkoutReservationGroupId String?
+  checkoutIntentId           String?
+  quantity                   Int
+  status                     ReservationStatus @default(ACTIVE)
+  expiresAt                  DateTime
+  createdAt                  DateTime          @default(now())
+  releasedAt                 DateTime?
 
   artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Restrict)
   user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
   order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  checkoutIntent CheckoutIntent? @relation(fields: [checkoutIntentId], references: [id], onDelete: SetNull)
 
   @@index([artworkId])
   @@index([userId])
   @@index([status])
   @@index([expiresAt])
   @@index([checkoutSessionId])
+  @@index([checkoutReservationGroupId])
+  @@index([checkoutIntentId])
 }
 
 // ===========================================================================
@@ -701,6 +983,68 @@ model Shipment {
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([status])
+}
+
+model ArtistOrderFulfillment {
+  id                     String   @id @default(uuid())
+  orderId                String
+  artistId               String
+  carrier                String?
+  trackingReference      String?
+  trackingUrl            String?
+  evidenceReferences     String[] @default([])
+  shippedAt              DateTime?
+  artistCompletionConfirmedAt DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  payout                 ArtistPayout?
+
+  order  Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  artist ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, artistId])
+  @@index([artistId, updatedAt])
+  @@index([orderId])
+}
+
+model DeliveryDispute {
+  id             String               @id @default(uuid())
+  orderId        String
+  buyerId        String
+  status         DeliveryDisputeStatus @default(OPEN)
+  reason         String
+  description    String
+  evidenceReferences String[]          @default([])
+  artistResponse String?
+  artistEvidenceReferences String[]    @default([])
+  artistRespondedAt DateTime?
+  resolutionNote String?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  buyer    User   @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  resolver User?  @relation("DeliveryDisputeResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@index([orderId, status])
+  @@index([buyerId, createdAt])
+}
+
+model OrderDeliveryEvent {
+  id          String                @id @default(uuid())
+  orderId     String
+  actorId     String?
+  eventType   OrderDeliveryEventType
+  occurredAt  DateTime              @default(now())
+  metadata    Json?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, occurredAt])
+  @@index([actorId, occurredAt])
 }
 
 // ===========================================================================
@@ -854,6 +1198,18 @@ enum AuditAction {
   SYSTEM_SETTING_CHANGED
   REVIEW_APPROVED
   REVIEW_REJECTED
+  USER_STATUS_CHANGED
+  USER_WARNED
+  REPORT_REVIEWED
+  VERIFICATION_REQUEST_CREATED
+  VERIFICATION_RESPONSE_SUBMITTED
+  VERIFICATION_REQUEST_CANCELLED
+  CONTACT_MESSAGE_STATUS_CHANGED
+  FINANCIAL_OPERATION_CHANGED
+  ARTWORK_SUBMITTED
+  ARTWORK_ARCHIVED
+  ARTWORK_PUBLISHED
+  ARTWORK_UPDATED
 }
 
 model AuditLog {
@@ -862,6 +1218,8 @@ model AuditLog {
   action     AuditAction
   entityType String
   entityId   String?
+  reason     String?
+  requestId  String?
   metadata   Json?
   ipAddress  String?
   userAgent  String?
@@ -873,6 +1231,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([action])
+  @@index([requestId])
 }
 
 // ===========================================================================
@@ -919,13 +1278,19 @@ model Message {
   attachmentName String?
   attachmentSize Int?
   readAt         DateTime?
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  pinnedAt       DateTime?
+  pinnedById     String?
   createdAt      DateTime  @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  pinnedBy     User?        @relation("MessagePinActor", fields: [pinnedById], references: [id], onDelete: SetNull)
 
   @@index([conversationId])
   @@index([createdAt])
+  @@index([conversationId, pinnedAt])
 }
 
 model CommunityPost {
@@ -1036,10 +1401,11 @@ model Report {
   targetId    String
   reason      String
   description String?
-  status      ReportStatus     @default(PENDING)
-  reviewedBy  String?
-  reviewedAt  DateTime?
-  createdAt   DateTime         @default(now())
+  status         ReportStatus @default(PENDING)
+  resolutionNote String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
 
   reporter User  @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Restrict)
   reviewer User? @relation("ReportsReviewed", fields: [reviewedBy], references: [id], onDelete: SetNull)
@@ -1047,4 +1413,127 @@ model Report {
   @@index([targetType, targetId])
   @@index([status])
   @@index([reporterId])
+}
+
+// ===========================================================================
+// DOMAIN 18 — ENFORCEMENT HISTORY
+// ===========================================================================
+
+enum EnforcementAction {
+  WARNING
+  RESTRICTION
+  SUSPENSION
+  BAN
+  REINSTATEMENT
+}
+
+// One row per enforcement decision against a user. `User.status` is the
+// authoritative CURRENT state; this table is the history that explains
+// how it got there and when a temporary measure ends.
+//
+// A RESTRICTION / SUSPENSION / BAN row is "active" while `endedAt` is
+// null. It ends when an admin reinstates the user, when it is replaced by
+// a more severe action, or when `expiresAt` passes (the API reinstates
+// lazily on the user's next request, so a failed scheduled job can never
+// leave an expired suspension in force). `actorId` is null for those
+// automatic expiries. `reportId` is a plain reference (no FK) so this
+// table does not depend on how reports are modelled.
+model UserEnforcement {
+  id             String            @id @default(uuid())
+  userId         String
+  actorId        String?
+  action         EnforcementAction
+  reason         String
+  previousStatus UserStatus?
+  newStatus      UserStatus?
+  expiresAt      DateTime?
+  endedAt        DateTime?
+  endedReason    String?
+  reportId       String?
+  createdAt      DateTime          @default(now())
+
+  user  User  @relation("EnforcementTarget", fields: [userId], references: [id], onDelete: Restrict)
+  actor User? @relation("EnforcementActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, endedAt])
+  @@index([expiresAt])
+}
+
+// ===========================================================================
+// DOMAIN 19 — ARTIST VERIFICATION WORKFLOW
+// ===========================================================================
+//
+// ArtistProfile.verificationStatus stays the single authoritative answer to
+// "is this artist verified?". Nothing below changes it except an authorised
+// final decision (ArtistVerificationDecision). The information-request
+// lifecycle is deliberately SEPARATE from that status: asking an artist for
+// more information, or receiving their answer, never verifies them.
+
+enum VerificationRequestStatus {
+  AWAITING_ARTIST_INPUT
+  AWAITING_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+// One row per request ROUND. A new round never edits an old one: rounds are
+// numbered per artist and `fields` is a snapshot, written once at creation,
+// of exactly what was asked (type, label, instructions, required) — so
+// history stays accurate even if the field catalogue changes later.
+model VerificationInfoRequest {
+  id                 String                    @id @default(uuid())
+  artistId           String
+  round              Int
+  status             VerificationRequestStatus @default(AWAITING_ARTIST_INPUT)
+  message            String?
+  fields             Json
+  requestedById      String?
+  createdAt          DateTime                  @default(now())
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?
+
+  artist      ArtistProfile           @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  requestedBy User?                   @relation("VerificationRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  cancelledBy User?                   @relation("VerificationCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  submission  VerificationSubmission?
+  decisions   ArtistVerificationDecision[]
+
+  @@unique([artistId, round])
+  @@index([artistId, status])
+  @@index([status, createdAt])
+}
+
+// The artist's answer to one round. At most one per round (requestId is
+// unique), so a repeat submission is rejected by the database itself, not
+// only by application checks.
+model VerificationSubmission {
+  id            String   @id @default(uuid())
+  requestId     String   @unique
+  submittedById String?
+  responses     Json
+  submittedAt   DateTime @default(now())
+
+  request     VerificationInfoRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  submittedBy User?                   @relation("VerificationSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+}
+
+// Immutable record of a final decision. `requestId` points at the round that
+// was under review when the decision was made (if any).
+model ArtistVerificationDecision {
+  id          String             @id @default(uuid())
+  artistId    String
+  decision    VerificationStatus
+  reason      String?
+  requestId   String?
+  decidedById String?
+  createdAt   DateTime           @default(now())
+
+  artist    ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  request   VerificationInfoRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  decidedBy User?         @relation("VerificationDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([artistId, createdAt])
 }

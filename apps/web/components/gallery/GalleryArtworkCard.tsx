@@ -2,12 +2,7 @@ import Link from 'next/link';
 
 import { CoverImage } from '../ui/CoverImage';
 import type { ArtworkSummary } from '../../lib/artworksApi';
-
-const priceFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD', // TODO: switch to artwork.currency once multi-currency display is needed
-  maximumFractionDigits: 0,
-});
+import { formatListingPrice } from '../../lib/listingPricing';
 
 export function GalleryArtworkCard({ artwork }: { artwork: ArtworkSummary }) {
   return (
@@ -54,7 +49,7 @@ export function GalleryArtworkCard({ artwork }: { artwork: ArtworkSummary }) {
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-foreground/20 bg-background/60 px-3 py-1 text-xs font-medium text-foreground backdrop-blur-sm">
-          {priceFormatter.format(Number(artwork.price))}
+          {formatListingPrice(artwork.price, artwork.currency)}
         </span>
       </div>
     </Link>

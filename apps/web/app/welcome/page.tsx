@@ -14,7 +14,7 @@ function WelcomePageContent() {
       <Reveal>
         <p className="text-[13px] font-medium uppercase tracking-[0.3em] text-accent">Welcome</p>
         <h1 className="mt-3 font-display text-4xl leading-[1.05] text-foreground">
-          What brings you to the <span className="italic text-accent">FineArts?</span>
+          What brings you to the <span className="italic text-accent">Fine Arts?</span>
         </h1>
       </Reveal>
 

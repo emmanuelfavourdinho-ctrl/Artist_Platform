@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import { isSupportedCurrency } from '../lib/money.js';
+
+const supportedCurrencySchema = z
+  .string()
+  .length(3)
+  .transform((currency) => currency.toUpperCase())
+  .refine(isSupportedCurrency, 'Currency is not supported for payment.')
+  .default('USD');
 
 const referenceSchema = z.object({
   url: z.string().url(),
@@ -19,7 +27,7 @@ export const createCommissionSchema = z.object({
   intendedUse: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(2000).optional(),
   budget: z.number().positive().max(1_000_000).optional(),
-  currency: z.string().length(3).toUpperCase().default('USD'),
+  currency: supportedCurrencySchema,
   deadline: z.coerce
     .date()
     .refine((date) => date > new Date(), 'Deadline must be in the future')
@@ -33,7 +41,7 @@ export const updateCommissionStatusSchema = z.object({
 
 export const createProposalSchema = z.object({
   price: z.number().positive().max(1_000_000),
-  currency: z.string().length(3).toUpperCase().default('USD'),
+  currency: supportedCurrencySchema,
   estimatedCompletion: z.coerce.date().optional(),
   revisions: z.number().int().min(0).max(20).optional(),
   deliveryFormat: z.string().trim().max(200).optional(),

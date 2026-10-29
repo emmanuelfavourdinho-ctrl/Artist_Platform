@@ -49,6 +49,7 @@ export async function listArtworks(req: Request, res: Response) {
   const where: Prisma.ArtworkWhereInput = {
     status: 'PUBLISHED',
     visibility: 'PUBLIC',
+    currency: 'USD',
   };
 
   if (query.category) {
@@ -114,7 +115,8 @@ export async function listArtworks(req: Request, res: Response) {
       slug: artwork.artist.slug,
       verified: artwork.artist.verificationStatus === 'VERIFIED',
     },
-    available: isAvailable(artwork.inventory),
+    available: isAvailable(artwork.inventory) && artwork.currency.toUpperCase() === 'USD',
+    priceReconciliationRequired: artwork.currency.toUpperCase() !== 'USD',
   }));
 
   res.json({
@@ -171,6 +173,7 @@ export async function getArtworkBySlug(req: Request, res: Response) {
       inventory: { select: { quantity: true, reservedQuantity: true, soldQuantity: true } },
       artist: {
         select: {
+          id: true,
           displayName: true,
           slug: true,
           biography: true,
@@ -208,8 +211,10 @@ export async function getArtworkBySlug(req: Request, res: Response) {
       styles: artwork.styles.map((entry) => entry.style),
       themes: artwork.themes.map((entry) => entry.theme),
       mediums: artwork.mediums.map((entry) => entry.medium),
-      available: isAvailable(artwork.inventory),
+      available: isAvailable(artwork.inventory) && artwork.currency.toUpperCase() === 'USD',
+      priceReconciliationRequired: artwork.currency.toUpperCase() !== 'USD',
       artist: {
+        id: artwork.artist.id,
         name: artwork.artist.displayName,
         slug: artwork.artist.slug,
         biography: artwork.artist.biography,

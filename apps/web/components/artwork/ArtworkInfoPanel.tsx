@@ -1,13 +1,11 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 
 import type { ArtworkDetail } from '../../lib/artworksApi';
 import { ArtworkActions } from './ArtworkActions';
-
-const priceFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD', // TODO: switch to artwork.currency once multi-currency display is needed
-  maximumFractionDigits: 0,
-});
+import { formatListingPrice } from '../../lib/listingPricing';
+import { publicUrl } from '../../lib/siteUrl';
+import { ShareActions } from '../ui/ShareActions';
 
 function formatDimensions(dimensions: ArtworkDetail['dimensions']): string | null {
   const { width, height, depth } = dimensions;
@@ -19,6 +17,8 @@ function formatDimensions(dimensions: ArtworkDetail['dimensions']): string | nul
 export function ArtworkInfoPanel({ artwork }: { artwork: ArtworkDetail }) {
   const dimensions = formatDimensions(artwork.dimensions);
   const tags = [...artwork.mediums, ...artwork.styles, ...artwork.themes];
+  const messageHref = `/messages?artistId=${encodeURIComponent(artwork.artist.id)}&artistSlug=${encodeURIComponent(artwork.artist.slug)}&artworkId=${encodeURIComponent(artwork.id)}` as Route;
+  const commissionHref = `/commissions/request?artistId=${encodeURIComponent(artwork.artist.id)}&artistSlug=${encodeURIComponent(artwork.artist.slug)}` as Route;
 
   return (
     <div className="flex flex-col">
@@ -46,13 +46,17 @@ export function ArtworkInfoPanel({ artwork }: { artwork: ArtworkDetail }) {
 
       <div className="mt-6 flex items-center gap-3">
         <span className="font-display text-2xl text-foreground">
-          {priceFormatter.format(Number(artwork.price))}
+          {formatListingPrice(artwork.price, artwork.currency)}
         </span>
-        {!artwork.available && (
+        {artwork.priceReconciliationRequired ? (
+          <span className="rounded-full bg-surface px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
+            USD price verification required
+          </span>
+        ) : !artwork.available ? (
           <span className="rounded-full bg-surface px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
             Sold
           </span>
-        )}
+        ) : null}
       </div>
 
       <ArtworkActions
@@ -63,6 +67,11 @@ export function ArtworkInfoPanel({ artwork }: { artwork: ArtworkDetail }) {
         available={artwork.available}
         imageUrl={artwork.images[0]?.url ?? null}
       />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link href={messageHref} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-foreground/20 px-4 text-sm font-medium text-foreground hover:border-accent hover:text-accent">Message Artist</Link>
+        {artwork.artist.verified && <Link href={commissionHref} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-foreground/20 px-4 text-sm font-medium text-foreground hover:border-accent hover:text-accent">Request a Commission</Link>}
+      </div>
+      <ShareActions className="mt-3" url={publicUrl(`/artwork/${artwork.slug}`)} title={`${artwork.title} by ${artwork.artist.name} — Fine Arts`} />
       {artwork.description && (
         <div className="mt-10 border-t border-foreground/10 pt-8">
           <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">

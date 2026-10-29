@@ -5,7 +5,7 @@ export interface AuthResponseUser {
   email: string;
   firstName: string;
   lastName: string;
-  status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED' | 'PENDING_VERIFICATION';
+  status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED' | 'PENDING_VERIFICATION' | 'RESTRICTED' | 'BANNED';
   roles: string[];
 }
 
@@ -36,7 +36,11 @@ export interface AuthSuccessBody {
 // go to /account/status regardless of redirectTo: that business rule must
 // not be bypassable just by attaching a redirect param.
 export function resolveAuthDestination(body: AuthSuccessBody, redirectTo?: string | null): Route {
-  if (body.user.status === 'SUSPENDED' || body.user.status === 'DEACTIVATED') {
+  if (
+    body.user.status === 'SUSPENDED' ||
+    body.user.status === 'DEACTIVATED' ||
+    body.user.status === 'BANNED'
+  ) {
     return '/account/status' as Route;
   }
   const safeRedirect = getSafeRedirect(redirectTo);

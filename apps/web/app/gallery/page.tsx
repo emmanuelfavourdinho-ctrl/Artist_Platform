@@ -7,11 +7,11 @@ import { GalleryPagination } from '../../components/gallery/GalleryPagination';
 import { fetchArtworks, ListArtworksQuery, ListArtworksResponse } from '../../lib/artworksApi';
 
 export const metadata: Metadata = {
-  title: 'The Collection — FineArts',
+  title: 'The Collection — Fine Arts',
   description:
     'Discover curated original paintings, sculptures, and digital art from verified independent artists worldwide.',
   openGraph: {
-    title: 'The Collection — FineArts',
+    title: 'The Collection — Fine Arts',
     description: 'Browse original fine art available directly from independent creators.',
     type: 'website',
   },

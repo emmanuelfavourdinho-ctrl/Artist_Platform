@@ -6,17 +6,24 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { createCheckoutSession } from '@/lib/checkoutApi';
+import { checkoutIntentStorageKey, createCheckoutSession } from '@/lib/checkoutApi';
+import { formatListingPrice, isVerifiedUsdListing } from '@/lib/listingPricing';
 
 export default function CartPage() {
   const router = useRouter();
   const { cart, removeFromCart, totalPrice } = useCart();
-  const { appUser, loading: authLoading } = useAuth();
+  const { appUser, firebaseUser, loading: authLoading } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const hasUnverifiedListing = cart.some((item) => !isVerifiedUsdListing(item.currency));
 
   const handleCheckout = async () => {
     setCheckoutError(null);
+
+    if (cart.some((item) => !isVerifiedUsdListing(item.currency))) {
+      setCheckoutError('This cart contains an artwork awaiting USD price verification. Remove it before checkout.');
+      return;
+    }
 
     // Cart stays guest-friendly (per how this was scoped) — login is
     // only required at this exact step, not to view the cart itself.
@@ -26,13 +33,24 @@ export default function CartPage() {
     }
 
     setIsProcessing(true);
+    let storageKey: string | null = null;
     try {
       const items = cart.map((item) => ({ artworkId: item.id, quantity: 1 }));
-      const checkoutUrl = await createCheckoutSession(items);
+      storageKey = checkoutIntentStorageKey(firebaseUser!.uid, items);
+      let idempotencyKey = localStorage.getItem(storageKey);
+      if (!idempotencyKey) {
+        idempotencyKey = crypto.randomUUID();
+        localStorage.setItem(storageKey, idempotencyKey);
+      }
+      const checkoutUrl = await createCheckoutSession(items, idempotencyKey);
       // Full page navigation, not router.push — this goes to Stripe's
       // own domain, not an internal route.
       window.location.href = checkoutUrl;
     } catch (err) {
+      const code = (err as Error & { code?: string }).code;
+      if (storageKey && (code === 'CHECKOUT_INTENT_TERMINAL' || code === 'CHECKOUT_ALREADY_PAID')) {
+        localStorage.removeItem(storageKey);
+      }
       setCheckoutError(
         err instanceof Error ? err.message : 'Could not start checkout. Please try again.',
       );
@@ -77,7 +95,7 @@ export default function CartPage() {
                 <div className="flex-1">
                   <h3 className="font-['Fraunces'] text-lg">{item.title}</h3>
                   <p className="font-mono text-sm text-[rgb(var(--muted))] mt-1">
-                    ${Number(item.price).toLocaleString()}
+                    {formatListingPrice(item.price, item.currency)}
                   </p>
                 </div>
                 <button
@@ -96,7 +114,7 @@ export default function CartPage() {
             </h2>
             <div className="flex justify-between font-mono text-sm">
               <span className="text-[rgb(var(--muted))]">Subtotal</span>
-              <span>${totalPrice.toLocaleString()}</span>
+              <span>{totalPrice === null ? 'Unavailable pending price review' : formatListingPrice(totalPrice, 'USD')}</span>
             </div>
             <div className="flex justify-between font-mono text-sm">
               <span className="text-[rgb(var(--muted))]">Shipping</span>
@@ -104,9 +122,14 @@ export default function CartPage() {
             </div>
             <div className="border-t border-[rgb(var(--border)/0.1)] pt-4 flex justify-between font-semibold text-lg">
               <span>Total</span>
-              <span>${totalPrice.toLocaleString()}</span>
+              <span>{totalPrice === null ? 'Unavailable pending price review' : formatListingPrice(totalPrice, 'USD')}</span>
             </div>
 
+            {hasUnverifiedListing && (
+              <p role="alert" className="text-sm text-amber-600">
+                This cart contains an artwork awaiting USD price verification. Remove it before checkout.
+              </p>
+            )}
             {checkoutError && (
               <p role="alert" className="text-sm text-red-500">
                 {checkoutError}
@@ -115,7 +138,7 @@ export default function CartPage() {
 
             <button
               onClick={handleCheckout}
-              disabled={isProcessing || authLoading}
+              disabled={isProcessing || authLoading || hasUnverifiedListing}
               className="w-full py-3 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] font-medium text-sm rounded transition-opacity disabled:opacity-50"
             >
               {isProcessing ? 'Redirecting to secure checkout…' : 'Proceed to Checkout'}

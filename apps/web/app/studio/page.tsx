@@ -1,230 +1,131 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
-import {
-  CloudinaryImageUpload,
-  UploadedCloudinaryImage,
-} from '../../components/ui/CloudinaryImageUpload';
+import { useCallback, useEffect, useState } from 'react';
 import { ProtectedRoute } from '../../components/auth/ProtectedRoute';
-import { useAuth } from '../../context/AuthContext';
+import { StudioShell } from '../../components/studio/StudioShell';
+import { VerificationTaskBanner } from '../../components/studio/VerificationTaskBanner';
+import { fetchStudioArtworks, fetchStudioDisputes, type StudioArtwork, type StudioDispute } from '../../lib/studioApi';
+import { fetchArtistOrderFulfillments, type ArtistOrderFulfillmentView } from '../../lib/studioOrdersApi';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
-const API_BASE_URL = API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
-
-function StudioContent() {
-  const { firebaseUser } = useAuth();
-  const [artworks, setArtworks] = useState<any[]>([]);
+function OverviewContent() {
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [orders, setOrders] = useState<ArtistOrderFulfillmentView[]>([]);
+  const [disputes, setDisputes] = useState<StudioDispute[]>([]);
+  const [artworks, setArtworks] = useState<StudioArtwork[]>([]);
 
-  // Form State
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [price, setPrice] = useState('');
-  const [images, setImages] = useState<UploadedCloudinaryImage[]>([]);
-
-  const loadStudio = async () => {
+  const load = useCallback(async () => {
+    setError(null);
+    setLoading(true);
     try {
-      const token = await firebaseUser?.getIdToken();
-      const res = await fetch(`${API_BASE_URL}/v1/studio/artworks`, {
-        headers: {
-          Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-      });
-      const json = await res.json();
-      if (json.success) setArtworks(json.data.artworks);
-    } catch (err) {
-      console.error('Failed to load studio works:', err);
+      const [orderData, disputeData, artworkData] = await Promise.all([
+        fetchArtistOrderFulfillments(),
+        fetchStudioDisputes(),
+        fetchStudioArtworks(),
+      ]);
+      setOrders(orderData);
+      setDisputes(disputeData);
+      setArtworks(artworkData.artworks);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Could not load your studio overview.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    loadStudio();
-  }, [firebaseUser]);
+  useEffect(() => { void load(); }, [load]);
 
-  const handleCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      const token = await firebaseUser?.getIdToken();
-      const res = await fetch(`${API_BASE_URL}/v1/studio/artworks`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ title, description, price: Number(price), images }),
-      });
-
-      if (res.ok) {
-        setTitle('');
-        setDescription('');
-        setPrice('');
-        setImages([]);
-        setIsModalOpen(false);
-        await loadStudio();
-      }
-    } catch (err) {
-      console.error('Failed to create artwork:', err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const shipmentTasks = orders.filter((order) =>
+    !order.shippedAt && ['CONFIRMED', 'PROCESSING'].includes(order.order.status),
+  );
+  const disputeTasks = disputes.filter((dispute) =>
+    dispute.status === 'OPEN' && !dispute.artistRespondedAt,
+  );
+  const rejected = artworks.filter((artwork) => artwork.status === 'REJECTED');
+  const taskCount = shipmentTasks.length + disputeTasks.length + rejected.length;
 
   return (
-    <div className="min-h-screen bg-[rgb(var(--background))] text-[rgb(var(--foreground))] px-[var(--container-gutter)] py-12">
-      <header className="mb-12 border-b border-[rgb(var(--border)/0.12)] pb-8 flex justify-between items-end">
-        <div>
-          <span className="text-xs uppercase tracking-[0.2em] text-[rgb(var(--accent))] font-medium">
-            Creator Workspace
-          </span>
-          <h1 className="font-['Fraunces'] text-4xl md:text-6xl font-normal mt-2 tracking-tight">
-            Artist Studio
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/studio/commissions"
-            className="px-6 py-3 border border-[rgb(var(--border)/0.2)] text-sm font-medium rounded-[var(--radius-sm)] transition hover:border-[rgb(var(--accent))]"
-          >
-            Commissions
-          </Link>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-6 py-3 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] font-medium text-sm rounded-[var(--radius-sm)] transition-opacity hover:opacity-90"
-          >
-            + Publish New Work
-          </button>
-        </div>
-      </header>
-
-      {/* Catalog Table */}
-      {loading ? (
-        <div className="text-center py-20 text-[rgb(var(--muted))] font-mono text-sm">
-          Loading studio inventory...
-        </div>
-      ) : artworks.length === 0 ? (
-        <div className="text-center py-24 bg-[rgb(var(--surface))] rounded-[var(--radius-lg)] border border-[rgb(var(--border)/0.05)]">
-          <p className="font-['Fraunces'] text-xl text-[rgb(var(--muted))]">
-            No artworks published in your studio catalog yet.
-          </p>
-        </div>
-      ) : (
-        <div className="bg-[rgb(var(--surface))] rounded-[var(--radius-lg)] border border-[rgb(var(--border)/0.08)] overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[rgb(var(--border)/0.1)] text-xs uppercase text-[rgb(var(--muted))] font-mono">
-                <th className="p-4">Artwork</th>
-                <th className="p-4">Title</th>
-                <th className="p-4">Price</th>
-                <th className="p-4">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[rgb(var(--border)/0.06)] text-sm">
-              {artworks.map((art) => (
-                <tr
-                  key={art.id}
-                  className="hover:bg-[rgb(var(--surface-raised))] transition-colors"
-                >
-                  <td className="p-4 w-16">
-                    <div className="relative w-12 h-12 rounded-[var(--radius-sm)] overflow-hidden bg-[rgb(var(--background))]">
-                      <Image src={art.imageUrl} alt={art.title} fill className="object-cover" />
-                    </div>
-                  </td>
-                  <td className="p-4 font-['Fraunces'] font-normal text-base">{art.title}</td>
-                  <td className="p-4 font-mono">${Number(art.price).toLocaleString()}</td>
-                  <td className="p-4">
-                    <span className="px-2.5 py-1 text-[10px] uppercase font-mono rounded bg-[rgb(var(--accent)/0.15)] text-[rgb(var(--accent))]">
-                      {art.available ? 'Available' : 'Sold'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Upload Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-[rgb(var(--surface))] border border-[rgb(var(--border)/0.15)] p-8 rounded-[var(--radius-lg)] max-w-lg w-full space-y-6">
-            <h2 className="font-['Fraunces'] text-2xl">Publish Artwork</h2>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-xs uppercase text-[rgb(var(--muted))] mb-1 font-mono">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-[rgb(var(--background))] border border-[rgb(var(--border)/0.2)] p-3 rounded text-sm text-[rgb(var(--foreground))]"
-                />
-              </div>
-              <CloudinaryImageUpload value={images} onChange={setImages} />
-              <div>
-                <label className="block text-xs uppercase text-[rgb(var(--muted))] mb-1 font-mono">
-                  Price (USD)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="w-full bg-[rgb(var(--background))] border border-[rgb(var(--border)/0.2)] p-3 rounded text-sm text-[rgb(var(--foreground))]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase text-[rgb(var(--muted))] mb-1 font-mono">
-                  Description
-                </label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-[rgb(var(--background))] border border-[rgb(var(--border)/0.2)] p-3 rounded text-sm text-[rgb(var(--foreground))]"
-                />
-              </div>
-              <div className="flex justify-end gap-4 pt-4 border-t border-[rgb(var(--border)/0.1)]">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-[rgb(var(--muted))] hover:text-[rgb(var(--foreground))]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting || images.length === 0}
-                  className="px-6 py-2 bg-[rgb(var(--accent))] text-[rgb(var(--accent-foreground))] font-medium text-sm rounded transition-opacity disabled:opacity-50"
-                >
-                  {submitting ? 'Publishing...' : 'Publish Work'}
-                </button>
-              </div>
-            </form>
+    <StudioShell>
+      <div className="space-y-8">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[.18em] text-accent">Artist workspace</p>
+            <h1 className="mt-2 font-display text-4xl sm:text-5xl">Overview</h1>
+            <p className="mt-3 max-w-2xl text-sm text-muted">A clear view of what needs attention and what to do next.</p>
           </div>
-        </div>
-      )}
-    </div>
+          <Link href="/studio/artworks" className="min-h-11 rounded-md bg-accent px-5 py-3 text-sm font-medium text-background">Create artwork</Link>
+        </header>
+
+        <VerificationTaskBanner />
+
+        {error && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-red-400 bg-surface px-4 py-3 text-sm">
+            <span>{error}</span>
+            <button type="button" onClick={() => void load()} className="underline">Try again</button>
+          </div>
+        )}
+
+        <section aria-labelledby="attention-heading">
+          <div className="mb-4 flex items-end justify-between gap-4 border-b border-border/10 pb-3">
+            <div>
+              <p className="text-xs uppercase tracking-[.16em] text-muted">Your next steps</p>
+              <h2 id="attention-heading" className="mt-1 font-display text-2xl">Needs your attention</h2>
+            </div>
+            {!loading && taskCount > 0 && <span className="text-sm text-accent">{taskCount} open {taskCount === 1 ? 'task' : 'tasks'}</span>}
+          </div>
+
+          {loading ? (
+            <div role="status" aria-label="Loading attention items" className="h-32 animate-pulse rounded-lg bg-surface" />
+          ) : taskCount === 0 ? (
+            <div className="rounded-lg border border-border/10 bg-surface px-5 py-8">
+              <h3 className="font-display text-xl">You’re all caught up</h3>
+              <p className="mt-2 text-sm text-muted">No shipment, dispute or listing corrections need your attention right now.</p>
+              <Link href="/studio/artworks" className="mt-4 inline-block text-sm text-accent underline">Manage your artworks</Link>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/10 border-y border-border/10">
+              {shipmentTasks.map((order) => (
+                <li key={`shipment-${order.orderId}`} className="flex flex-col justify-between gap-4 py-5 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-accent">Shipment needed · {order.order.orderNumber}</p>
+                    <h3 className="mt-1 font-display text-lg">Prepare and record shipment</h3>
+                    <p className="mt-1 text-sm text-muted">{order.order.items.map((item) => item.title).join(', ')} · Order status: {order.order.status}</p>
+                    <p className="mt-1 text-xs text-muted">After saving carrier and tracking details, the buyer can follow the shipment. Tracking does not confirm delivery or payout.</p>
+                  </div>
+                  <Link href="/studio/orders" className="inline-flex min-h-11 items-center justify-center rounded-md border border-accent/50 px-4 text-sm text-accent">Open orders</Link>
+                </li>
+              ))}
+              {disputeTasks.map((dispute) => (
+                <li key={`dispute-${dispute.id}`} className="flex flex-col justify-between gap-4 py-5 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-accent">Dispute response needed · {dispute.order.orderNumber}</p>
+                    <h3 className="mt-1 font-display text-lg">{dispute.reason.replaceAll('_', ' ')}</h3>
+                    <p className="mt-1 text-sm text-muted">{dispute.order.items.map((item) => item.title).join(', ')} · {dispute.description}</p>
+                    {dispute.order.artistResponseDeadline && <p className="mt-1 text-xs text-muted">Artist response deadline: {new Date(dispute.order.artistResponseDeadline).toLocaleString()}</p>}
+                    <p className="mt-1 text-xs text-muted">Your response is recorded for review; it does not close the dispute or unblock release.</p>
+                  </div>
+                  <Link href="/studio/support" className="inline-flex min-h-11 items-center justify-center rounded-md border border-accent/50 px-4 text-sm text-accent">Respond to issue</Link>
+                </li>
+              ))}
+              {rejected.map((artwork) => (
+                <li key={`artwork-${artwork.id}`} className="flex flex-col justify-between gap-4 py-5 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-accent">Listing returned · {artwork.title}</p>
+                    <h3 className="mt-1 font-display text-lg">Correct and resubmit this artwork</h3>
+                    <p className="mt-1 text-sm text-muted">{artwork.moderationHistory[0]?.reason ?? 'Review the artwork details and submit it again for moderation.'}</p>
+                  </div>
+                  <Link href="/studio/artworks" className="inline-flex min-h-11 items-center justify-center rounded-md border border-accent/50 px-4 text-sm text-accent">Review artwork</Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </StudioShell>
   );
 }
 
 export default function StudioPage() {
-  return (
-    <ProtectedRoute allowRoles={['ARTIST']}>
-      <StudioContent />
-    </ProtectedRoute>
-  );
+  return <ProtectedRoute allowRoles={['ARTIST']}><OverviewContent /></ProtectedRoute>;
 }

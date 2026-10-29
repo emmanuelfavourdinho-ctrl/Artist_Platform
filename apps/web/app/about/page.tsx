@@ -1,7 +1,7 @@
 import { Reveal } from '../../components/ui/Reveal';
 
 export const metadata = {
-  title: 'About | FineArts',
+  title: 'About | Fine Arts',
   description: 'Learn about our mission to empower creators and collectors globally.',
 };
 
@@ -19,7 +19,7 @@ export default function AboutPage() {
         <Reveal delay={100}>
           <div className="space-y-6 text-foreground/80 leading-relaxed">
             <p>
-              FineArts was built to bridge the gap between world-class creators and serious
+              Fine Arts was built to bridge the gap between world-class creators and serious
               collectors. We believe digital and traditional artistry deserve a home designed with
               restraint, clarity, and precision.
             </p>

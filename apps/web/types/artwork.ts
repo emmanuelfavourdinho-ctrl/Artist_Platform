@@ -5,6 +5,7 @@ export interface ArtworkArtistSummary {
 }
 
 export interface ArtworkArtistDetail extends ArtworkArtistSummary {
+  id: string;
   biography: string | null;
   profileImageUrl: string | null;
 }
@@ -26,10 +27,8 @@ export interface ArtworkTag {
   slug: string;
 }
 
-// Note: `price` is typed `string`, not `number` — Prisma serializes its
-// Decimal columns to JSON as strings (see schema.prisma's design-notes
-// header, point 2). Always wrap with Number(artwork.price) before doing
-// math or formatting, same rule as everywhere else Decimal shows up.
+// Prisma serializes Decimal columns to strings. Keep listing amounts exact;
+// use the currency-aware listing formatter rather than converting to Number.
 export interface ArtworkSummary {
   id: string;
   slug: string;
@@ -39,6 +38,7 @@ export interface ArtworkSummary {
   image: ArtworkImageSummary | null;
   artist: ArtworkArtistSummary;
   available: boolean;
+  priceReconciliationRequired?: boolean;
 }
 
 export interface ArtworkDimensions {
@@ -65,6 +65,7 @@ export interface ArtworkDetail {
   themes: ArtworkTag[];
   mediums: ArtworkTag[];
   available: boolean;
+  priceReconciliationRequired?: boolean;
   artist: ArtworkArtistDetail;
 }
 

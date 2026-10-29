@@ -7,6 +7,7 @@ export async function syncArtworkToElasticsearch(artworkId: string) {
     include: {
       artist: true,
       images: { where: { isPrimary: true }, take: 1 },
+      inventory: { select: { quantity: true, reservedQuantity: true, soldQuantity: true } },
     },
   });
 
@@ -24,6 +25,14 @@ export async function syncArtworkToElasticsearch(artworkId: string) {
       description: artwork.description,
       price: Number(artwork.price),
       currency: artwork.currency,
+      available:
+        artwork.status === 'PUBLISHED' &&
+        artwork.visibility === 'PUBLIC' &&
+        artwork.currency.toUpperCase() === 'USD' &&
+        Boolean(
+          artwork.inventory &&
+            artwork.inventory.quantity - artwork.inventory.reservedQuantity - artwork.inventory.soldQuantity > 0,
+        ),
       artistName,
       primaryImage,
       status: artwork.status,

@@ -47,6 +47,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // syncAfterAuth. Without this, every signup/login made two nearly
   // simultaneous requests to the backend that could race each other.
   const lastSyncedUidRef = useRef<string | null>(null);
+  const activeUidRef = useRef<string | null>(null);
+  const authChangeVersionRef = useRef(0);
 
   async function loadAppUser(fbUser: FirebaseUser, extra?: SyncExtra): Promise<AuthSuccessBody> {
     try {
@@ -54,23 +56,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         { user: fbUser } as Parameters<typeof syncWithBackend>[0],
         extra,
       );
+      if (activeUidRef.current !== fbUser.uid) return body;
       lastSyncedUidRef.current = fbUser.uid;
       setAppUser(body.user);
       setArtistProfile(body.artistProfile);
       setError(null);
       return body;
     } catch (err) {
-      setError('account_sync_failed');
-      setAppUser(null);
-      setArtistProfile(null);
+      if (activeUidRef.current === fbUser.uid) {
+        setError('account_sync_failed');
+        setAppUser(null);
+        setArtistProfile(null);
+      }
       throw err;
     }
   }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
+      const version = ++authChangeVersionRef.current;
+      activeUidRef.current = fbUser?.uid ?? null;
+      setLoading(true);
+      setError(null);
       setFirebaseUser(fbUser);
       if (fbUser) {
+        if (lastSyncedUidRef.current !== fbUser.uid) {
+          setAppUser(null);
+          setArtistProfile(null);
+        }
         if (lastSyncedUidRef.current !== fbUser.uid) {
           try {
             await loadAppUser(fbUser);
@@ -83,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAppUser(null);
         setArtistProfile(null);
       }
-      setLoading(false);
+      if (version === authChangeVersionRef.current) setLoading(false);
     });
     return unsubscribe;
   }, []);
@@ -97,14 +110,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function syncAfterAuth(extra?: SyncExtra): Promise<AuthSuccessBody> {
     const fbUser = firebaseAuth.currentUser;
     if (!fbUser) throw new Error('not_authenticated');
+    activeUidRef.current = fbUser.uid;
+    setFirebaseUser(fbUser);
     return loadAppUser(fbUser, extra);
   }
 
   async function signOut() {
     await firebaseLogout();
+    activeUidRef.current = null;
     lastSyncedUidRef.current = null;
+    setFirebaseUser(null);
     setAppUser(null);
     setArtistProfile(null);
+    setError(null);
+    setLoading(false);
   }
 
   return (

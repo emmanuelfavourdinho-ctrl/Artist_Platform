@@ -35,6 +35,8 @@ export async function getArtistBySlug(req: Request, res: Response) {
       slug: true,
       biography: true,
       artisticStatement: true,
+      mission: true,
+      website: true,
       location: true,
       profileImageUrl: true,
       coverImageUrl: true,
@@ -49,13 +51,14 @@ export async function getArtistBySlug(req: Request, res: Response) {
 
   const [artworks, ratingAggregate, reviews] = await Promise.all([
     prisma.artwork.findMany({
-      where: { artistId: artist.id, status: 'PUBLISHED', visibility: 'PUBLIC' },
+        where: { artistId: artist.id, status: 'PUBLISHED', visibility: 'PUBLIC' },
       orderBy: { publishedAt: 'desc' },
       take: 24,
       select: {
         id: true,
         slug: true,
         title: true,
+        description: true,
         price: true,
         currency: true,
         images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
@@ -92,6 +95,8 @@ export async function getArtistBySlug(req: Request, res: Response) {
       slug: artist.slug,
       biography: artist.biography,
       artisticStatement: artist.artisticStatement,
+      mission: artist.mission,
+      website: artist.website,
       location: artist.location,
       profileImageUrl: artist.profileImageUrl,
       coverImageUrl: artist.coverImageUrl,
@@ -105,10 +110,12 @@ export async function getArtistBySlug(req: Request, res: Response) {
         id: artwork.id,
         slug: artwork.slug,
         title: artwork.title,
+        description: artwork.description,
         price: artwork.price,
         currency: artwork.currency,
         image: artwork.images[0] ?? null,
-        available: isAvailable(artwork.inventory),
+        available: isAvailable(artwork.inventory) && artwork.currency.toUpperCase() === 'USD',
+        priceReconciliationRequired: artwork.currency.toUpperCase() !== 'USD',
       })),
       reviews: reviews.map((review) => ({
         id: review.id,

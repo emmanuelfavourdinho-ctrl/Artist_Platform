@@ -1,34 +1,19 @@
-import { Request, Response, NextFunction } from 'express';
-import {
-  getOverviewMetrics,
-  getSalesTimeSeries,
-  getTopPerformingArtworks,
-} from '../services/analyticsService.js';
+import type { NextFunction, Request, Response } from 'express';
+import { getAnalyticsDashboard as buildDashboard } from '../services/analyticsService.js';
+import type { AnalyticsQuery } from '../validation/analytics.js';
 
-export async function getAnalyticsDashboard(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<Response | void> {
+/*
+  Explainer: GET /api/v1/analytics/dashboard — admin only (enforced at the
+  router level in analyticsRoutes.ts). `req.query` has already been
+  validated and defaulted by validateQuery(analyticsQuerySchema), so the
+  cast below is safe; there is deliberately no second, looser parse here.
+*/
+export async function getAnalyticsDashboard(req: Request, res: Response, next: NextFunction) {
   try {
-    const days = req.query.days ? Number(req.query.days) : undefined;
-    const limit = req.query.limit ? Number(req.query.limit) : 5;
-
-    const [overview, timeSeries, topArtworks] = await Promise.all([
-      getOverviewMetrics(),
-      getSalesTimeSeries(days),
-      getTopPerformingArtworks(limit),
-    ]);
-
-    return res.json({
-      success: true,
-      data: {
-        overview,
-        timeSeries,
-        topArtworks,
-      },
-    });
+    const { range, limit } = req.query as unknown as AnalyticsQuery;
+    const data = await buildDashboard(range, limit);
+    res.json({ status: 'success', data });
   } catch (error) {
-    return next(error);
+    next(error);
   }
 }

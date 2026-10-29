@@ -10,7 +10,7 @@ export async function searchArtworks(
     const { q, category, minPrice, maxPrice, from = 0, size = 12 } = req.query;
 
     const must: any[] = [];
-    const filter: any[] = [{ term: { available: true } }];
+    const filter: any[] = [{ term: { available: true } }, { term: { 'currency.keyword': 'USD' } }];
 
     if (q) {
       must.push({
@@ -80,7 +80,7 @@ export async function suggestArtworks(
           completion: {
             field: 'suggest',
             fuzzy: { fuzziness: 1 },
-            size: 5,
+            size: 25,
           },
         },
       },
@@ -90,10 +90,17 @@ export async function suggestArtworks(
     const firstBucket = Array.isArray(suggestResult) ? suggestResult[0] : undefined;
     const optionsArray = Array.isArray(firstBucket?.options) ? firstBucket.options : [];
 
-    const suggestions = optionsArray.map((opt: any) => ({
-      text: opt.text,
-      artwork: opt._source,
-    }));
+    const suggestions = optionsArray
+      .filter((opt: any) =>
+        opt._source?.available === true &&
+        typeof opt._source?.currency === 'string' &&
+        opt._source.currency.toUpperCase() === 'USD',
+      )
+      .slice(0, 5)
+      .map((opt: any) => ({
+        text: opt.text,
+        artwork: opt._source,
+      }));
 
     res.json({ success: true, data: { suggestions } });
   } catch (err) {

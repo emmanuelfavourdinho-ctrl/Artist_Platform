@@ -10,6 +10,7 @@
     "lint": "eslint \"src/**/*.{ts,js}\" --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "postinstall": "prisma generate --schema=prisma/schema.prisma",
     "db:seed": "prisma db seed",
     "create-admin": "tsx scripts/createAdmin.ts"
   },

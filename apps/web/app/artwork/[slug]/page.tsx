@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ArtworkGallery } from '../../../components/artwork/ArtworkGallery';
@@ -7,6 +8,7 @@ import { ReviewForm } from '../../../components/artwork/ReviewForm';
 import { ReviewsList } from '../../../components/artwork/ReviewsList';
 import { fetchArtworkBySlug } from '../../../lib/artworksApi';
 import { fetchArtworkReviews } from '../../../lib/reviewsApi';
+import { publicUrl } from '../../../lib/siteUrl';
 
 interface ArtworkPageProps {
   params: Promise<{ slug: string }>;
@@ -16,19 +18,23 @@ export async function generateMetadata({ params }: ArtworkPageProps): Promise<Me
   const { slug } = await params;
   const artwork = await fetchArtworkBySlug(slug);
 
-  if (!artwork) return { title: 'Artwork Not Found — FineArts' };
+  if (!artwork) return { title: 'Artwork Not Found — Fine Arts' };
 
   const artistName = artwork.artist.name;
   const primaryImage = artwork.images.find((img) => img.isPrimary)?.url ?? artwork.images[0]?.url;
 
   return {
-    title: `${artwork.title} by ${artistName} — FineArts`,
+    title: `${artwork.title} by ${artistName} — Fine Arts`,
     description: artwork.description ?? `${artwork.title}, an original work by ${artistName}.`,
+    alternates: { canonical: publicUrl(`/artwork/${artwork.slug}`) },
     openGraph: {
-      title: artwork.title,
-      description: artwork.description ?? `Original artwork by ${artistName}`,
-      images: primaryImage ? [{ url: primaryImage, alt: artwork.title }] : [],
+      type: 'website',
+      url: publicUrl(`/artwork/${artwork.slug}`),
+      title: `${artwork.title} by ${artistName} — Fine Arts`,
+      description: artwork.description ?? `Original artwork by ${artistName}.`,
+      images: primaryImage ? [{ url: primaryImage, alt: artwork.title, width: artwork.images.find((img) => img.url === primaryImage)?.width ?? undefined, height: artwork.images.find((img) => img.url === primaryImage)?.height ?? undefined }] : [],
     },
+    twitter: { card: 'summary_large_image' },
   };
 }
 
@@ -62,6 +68,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
         ? 'https://schema.org/InStock'
         : 'https://schema.org/OutOfStock',
     },
+    url: publicUrl(`/artwork/${artwork.slug}`),
   };
 
   return (
@@ -79,8 +86,17 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
 
           <div className="lg:col-span-5">
             <ArtworkInfoPanel artwork={artwork} />
+            <p className="mt-4 text-right text-xs">
+              <Link
+                className="text-slate-500 underline underline-offset-4 hover:text-accent"
+                href={`/report-issue?targetType=ARTWORK&targetSlug=${encodeURIComponent(artwork.slug)}&targetName=${encodeURIComponent(artwork.title)}`}
+              >
+                Report this artwork
+              </Link>
+            </p>
           </div>
         </div>
+        <Link href={`/artists/${artwork.artist.slug}`} className="mt-10 inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4">← Back to {artistName}&apos;s portfolio</Link>
 
         <section className="mt-20 border-t border-slate-200 pt-16 dark:border-slate-800">
           <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">

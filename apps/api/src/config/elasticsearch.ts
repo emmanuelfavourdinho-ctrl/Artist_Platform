@@ -21,6 +21,7 @@ export async function initElasticsearch() {
           description: { type: 'text' },
           artistName: { type: 'keyword' },
           price: { type: 'double' },
+          currency: { type: 'text', fields: { keyword: { type: 'keyword' } } },
           available: { type: 'boolean' },
           category: { type: 'keyword' },
           suggest: { type: 'completion' },
