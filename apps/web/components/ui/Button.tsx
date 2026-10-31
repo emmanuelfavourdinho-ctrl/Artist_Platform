@@ -3,10 +3,14 @@ import type { Route } from 'next';
 import type { ReactNode } from 'react';
 
 type ButtonVariant = 'primary' | 'secondary';
+// 'default' is the original size and is what every existing <Button> keeps.
+// 'compact' is smaller on phones only and identical to 'default' from `sm` up.
+type ButtonSize = 'default' | 'compact';
 
 type ButtonProps<T extends string> = {
   href: Route<T> | Route;
   variant?: ButtonVariant;
+  size?: ButtonSize;
   children: ReactNode;
 };
 
@@ -17,9 +21,21 @@ type ButtonProps<T extends string> = {
   main action we want people to take); `variant="secondary"` is the
   quieter outlined button.
 */
-export function Button<T extends string>({ href, variant = 'primary', children }: ButtonProps<T>) {
+export function Button<T extends string>({
+  href,
+  variant = 'primary',
+  size = 'default',
+  children,
+}: ButtonProps<T>) {
   const base =
-    'group inline-flex items-center gap-2.5 rounded-full px-7 py-3.5 text-sm font-medium tracking-wide transition-all duration-300 ease-cinematic focus-visible:outline-2';
+    'group inline-flex items-center gap-2.5 rounded-full font-medium tracking-wide transition-all duration-300 ease-cinematic focus-visible:outline-2';
+
+  const sizes: Record<ButtonSize, string> = {
+    default: 'px-7 py-3.5 text-sm',
+    // w-fit stops the button stretching edge to edge when it sits in a
+    // stacked (flex-col) wrapper on phones.
+    compact: 'w-fit px-5 py-3 text-[13px] sm:w-auto sm:px-7 sm:py-3.5 sm:text-sm',
+  };
 
   const styles: Record<ButtonVariant, string> = {
     primary: 'bg-accent text-accent-foreground hover:bg-foreground',
@@ -28,9 +44,12 @@ export function Button<T extends string>({ href, variant = 'primary', children }
   };
 
   return (
-    <Link href={href} className={`${base} ${styles[variant]}`}>
+    <Link href={href} className={`${base} ${sizes[size]} ${styles[variant]}`}>
       {children}
-      <span aria-hidden="true" className="transition-transform duration-300 ease-cinematic group-hover:translate-x-1">
+      <span
+        aria-hidden="true"
+        className="transition-transform duration-300 ease-cinematic group-hover:translate-x-1"
+      >
         →
       </span>
     </Link>

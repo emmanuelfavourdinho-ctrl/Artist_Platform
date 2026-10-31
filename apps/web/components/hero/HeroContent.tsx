@@ -40,10 +40,10 @@ export function HeroContent() {
         className="animate-reveal-up mt-9 flex flex-col gap-4 sm:flex-row"
         style={{ '--reveal-delay': '750ms' } as CSSProperties}
       >
-        <Button href="/gallery" variant="primary">
+        <Button href="/gallery" variant="primary" size="compact">
           Explore Artists
         </Button>
-        <Button href="/register" variant="secondary">
+        <Button href="/register" variant="secondary" size="compact">
           Start Creating
         </Button>
       </div>
