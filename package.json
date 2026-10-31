@@ -27,7 +27,7 @@
     "format": "prettier --write ."
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "22.x"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.2.0",
