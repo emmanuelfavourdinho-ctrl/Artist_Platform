@@ -2,8 +2,7 @@ apps/web.zip
 # Node modules
 node_modules/
 
-# npm lockfiles
-package-lock.json
+
 
 # Build output
 .next/
@@ -44,3 +43,5 @@ Thumbs.db
 *.save
 *.backup
 *~
+#Next.js build file
+next-env.d.ts
